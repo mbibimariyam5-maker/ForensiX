@@ -16,6 +16,7 @@ from backend.database import (
 )
 
 from backend.schemas import EvidenceCreate, FindingCreate
+from backend.ai_adapter import explain_finding
 
 
 app = FastAPI(
@@ -202,7 +203,6 @@ def list_case_evidence(case_id: str):
 @app.post("/api/findings")
 def add_finding(finding: FindingCreate):
 
-    # Check whether the case exists
     case = get_case(finding.case_id)
 
     if case is None:
@@ -211,7 +211,6 @@ def add_finding(finding: FindingCreate):
             detail="Case not found"
         )
 
-    # Check whether the finding ID already exists
     existing_findings = get_case_findings(finding.case_id)
 
     for existing_finding in existing_findings:
@@ -221,7 +220,6 @@ def add_finding(finding: FindingCreate):
                 detail="Finding ID already exists"
             )
 
-    # Store reasons list as JSON text in SQLite
     reasons_json = json.dumps(finding.reasons)
 
     create_finding(
@@ -256,7 +254,6 @@ def add_finding(finding: FindingCreate):
 @app.get("/api/cases/{case_id}/findings")
 def list_case_findings(case_id: str):
 
-    # Check whether the case exists
     case = get_case(case_id)
 
     if case is None:
@@ -267,7 +264,6 @@ def list_case_findings(case_id: str):
 
     findings = get_case_findings(case_id)
 
-    # Convert stored JSON reasons back into a Python list
     for finding in findings:
         try:
             finding["reasons"] = json.loads(finding["reasons"])
@@ -280,3 +276,37 @@ def list_case_findings(case_id: str):
         "count": len(findings),
         "findings": findings
     }
+
+
+# =========================================================
+# AI EXPLANATION API
+# =========================================================
+
+@app.post("/api/ai/explain")
+def explain_finding_api(finding: FindingCreate):
+
+    finding_data = {
+        "finding_id": finding.finding_id,
+        "artifact": finding.artifact,
+        "type": finding.type,
+        "severity": finding.severity,
+        "score": finding.score,
+        "timestamp": finding.timestamp,
+        "reasons": finding.reasons,
+        "source": finding.source
+    }
+
+    try:
+        explanation = explain_finding(finding_data)
+
+        return {
+            "status": "success",
+            "finding_id": finding.finding_id,
+            "explanation": explanation
+        }
+
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=502,
+            detail=str(error)
+        )
