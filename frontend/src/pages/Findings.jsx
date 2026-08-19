@@ -1,91 +1,47 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getCases, getCaseFindings } from "../services/api";
 
 function Findings() {
   const [filter, setFilter] = useState("ALL");
   const [selectedFinding, setSelectedFinding] = useState(null);
+  const [caseData, setCaseData] = useState(null);
+  const [findings, setFindings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const findings = [
-    {
-      id: "F-001",
-      severity: "HIGH",
-      type: "MULTIPLE_FAILED_LOGINS",
-      artifact: "authentication.log",
-      source: "Authentication Logs",
-      timestamp: "18 Aug 2026 • 10:24:12",
-      score: 85,
-      explanation:
-        "Multiple failed authentication attempts were detected within a short period.",
-      reasons: [
-        "Repeated authentication failures",
-        "Multiple attempts within a short time window",
-        "Activity requires investigator review",
-      ],
-    },
-    {
-      id: "F-002",
-      severity: "CRITICAL",
-      type: "IOC_MATCH",
-      artifact: "suspicious_file.exe",
-      source: "File Analysis",
-      timestamp: "18 Aug 2026 • 10:18:43",
-      score: 94,
-      explanation:
-        "The analyzed artifact matched a configured indicator of compromise.",
-      reasons: [
-        "Configured IOC match detected",
-        "Artifact identified during file analysis",
-        "High confidence detection result",
-      ],
-    },
-    {
-      id: "F-003",
-      severity: "MEDIUM",
-      type: "SUSPICIOUS_EVENT",
-      artifact: "system.log",
-      source: "System Logs",
-      timestamp: "18 Aug 2026 • 09:52:31",
-      score: 59,
-      explanation:
-        "An unusual system event was identified and requires investigator review.",
-      reasons: [
-        "Unusual system activity detected",
-        "Event differs from expected behavior",
-        "Additional investigation recommended",
-      ],
-    },
-    {
-      id: "F-004",
-      severity: "HIGH",
-      type: "UNUSUAL_PROCESS",
-      artifact: "process_list.json",
-      source: "Process Analysis",
-      timestamp: "18 Aug 2026 • 09:41:18",
-      score: 81,
-      explanation:
-        "A process with unusual execution characteristics was detected.",
-      reasons: [
-        "Unusual process execution detected",
-        "Process behavior requires review",
-        "Related process artifact identified",
-      ],
-    },
-    {
-      id: "F-005",
-      severity: "LOW",
-      type: "UNCOMMON_FILE_ACCESS",
-      artifact: "browser_history.db",
-      source: "Browser Analysis",
-      timestamp: "18 Aug 2026 • 09:30:05",
-      score: 31,
-      explanation:
-        "An uncommon file access pattern was observed during analysis.",
-      reasons: [
-        "Uncommon access pattern detected",
-        "Browser artifact associated with event",
-        "Low priority investigation indicator",
-      ],
-    },
-  ];
+  useEffect(() => {
+    async function loadFindings() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const casesResponse = await getCases();
+        const cases = casesResponse.cases || [];
+
+        if (cases.length === 0) {
+          setCaseData(null);
+          setFindings([]);
+          return;
+        }
+
+        const currentCase = cases[0];
+        setCaseData(currentCase);
+
+        const findingsResponse = await getCaseFindings(
+          currentCase.case_id
+        );
+
+        setFindings(findingsResponse.findings || []);
+      } catch (err) {
+        console.error("Findings API error:", err);
+        setError(err.message || "Failed to load findings.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadFindings();
+  }, []);
 
   const filters = [
     "ALL",
@@ -101,6 +57,107 @@ function Findings() {
       : findings.filter(
           (finding) => finding.severity === filter
         );
+
+  const criticalCount = findings.filter(
+    (finding) => finding.severity === "CRITICAL"
+  ).length;
+
+  const highCount = findings.filter(
+    (finding) => finding.severity === "HIGH"
+  ).length;
+
+  const averageScore =
+    findings.length > 0
+      ? Math.round(
+          findings.reduce(
+            (total, finding) =>
+              total + (Number(finding.score) || 0),
+            0
+          ) / findings.length
+        )
+      : 0;
+
+  function formatTimestamp(timestamp) {
+    if (!timestamp) {
+      return "--";
+    }
+
+    const date = new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) {
+      return timestamp;
+    }
+
+    return date.toLocaleString([], {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+
+  function getExplanation(finding) {
+    if (finding.explanation) {
+      return finding.explanation;
+    }
+
+    if (finding.reasons && finding.reasons.length > 0) {
+      return finding.reasons.join(". ") + ".";
+    }
+
+    return "No explanation is available for this finding yet.";
+  }
+
+  if (loading) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header">
+          <div>
+            <h1>Findings</h1>
+            <p>Loading forensic findings...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header">
+          <div>
+            <h1>Findings</h1>
+            <p>Unable to load findings.</p>
+          </div>
+        </div>
+
+        <div className="section-card">
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!caseData) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header">
+          <div>
+            <h1>Findings</h1>
+            <p>No investigation case is available.</p>
+          </div>
+        </div>
+
+        <div className="section-card">
+          <p>
+            Create a case in the backend before viewing findings.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard">
@@ -118,7 +175,7 @@ function Findings() {
 
         <div className="case-info">
           <span>CASE</span>
-          <strong>CASE-2026-001</strong>
+          <strong>{caseData.case_id}</strong>
         </div>
 
       </div>
@@ -129,25 +186,33 @@ function Findings() {
 
         <div className="stat-card">
           <h3>Total Findings</h3>
-          <div className="stat-value">17</div>
+          <div className="stat-value">
+            {findings.length}
+          </div>
           <small>Detected findings</small>
         </div>
 
         <div className="stat-card">
           <h3>Critical</h3>
-          <div className="stat-value">02</div>
+          <div className="stat-value">
+            {String(criticalCount).padStart(2, "0")}
+          </div>
           <small>Immediate review</small>
         </div>
 
         <div className="stat-card">
           <h3>High</h3>
-          <div className="stat-value">05</div>
+          <div className="stat-value">
+            {String(highCount).padStart(2, "0")}
+          </div>
           <small>Requires attention</small>
         </div>
 
         <div className="stat-card">
           <h3>Average Score</h3>
-          <div className="stat-value">70</div>
+          <div className="stat-value">
+            {findings.length > 0 ? averageScore : "--"}
+          </div>
           <small>Across findings</small>
         </div>
 
@@ -196,11 +261,11 @@ function Findings() {
 
             <div
               className={`finding-large-card ${
-                selectedFinding?.id === finding.id
+                selectedFinding?.finding_id === finding.finding_id
                   ? "finding-selected"
                   : ""
               }`}
-              key={finding.id}
+              key={finding.finding_id}
               onClick={() => setSelectedFinding(finding)}
             >
 
@@ -210,18 +275,20 @@ function Findings() {
                 <div className="finding-title">
 
                   <span
-                    className={`severity-badge ${finding.severity.toLowerCase()}`}
+                    className={`severity-badge ${
+                      finding.severity?.toLowerCase() || ""
+                    }`}
                   >
-                    {finding.severity}
+                    {finding.severity || "UNKNOWN"}
                   </span>
 
                   <div>
                     <h3>
-                      {finding.type}
+                      {finding.type || "UNKNOWN"}
                     </h3>
 
                     <span>
-                      {finding.id}
+                      {finding.finding_id}
                     </span>
                   </div>
 
@@ -231,7 +298,7 @@ function Findings() {
                 <div className="score-box">
 
                   <strong>
-                    {finding.score}
+                    {finding.score ?? "--"}
                   </strong>
 
                   <span>
@@ -249,21 +316,21 @@ function Findings() {
                 <div>
                   <span>ARTIFACT</span>
                   <strong>
-                    {finding.artifact}
+                    {finding.artifact || "--"}
                   </strong>
                 </div>
 
                 <div>
                   <span>SOURCE</span>
                   <strong>
-                    {finding.source}
+                    {finding.source || "--"}
                   </strong>
                 </div>
 
                 <div>
                   <span>TIMESTAMP</span>
                   <strong>
-                    {finding.timestamp}
+                    {formatTimestamp(finding.timestamp)}
                   </strong>
                 </div>
 
@@ -276,7 +343,7 @@ function Findings() {
                 <span>EXPLANATION</span>
 
                 <p>
-                  {finding.explanation}
+                  {getExplanation(finding)}
                 </p>
 
               </div>
@@ -332,11 +399,11 @@ function Findings() {
                 </span>
 
                 <h2>
-                  {selectedFinding.type}
+                  {selectedFinding.type || "UNKNOWN"}
                 </h2>
 
                 <span className="panel-id">
-                  {selectedFinding.id}
+                  {selectedFinding.finding_id}
                 </span>
               </div>
 
@@ -357,9 +424,11 @@ function Findings() {
                 <span>SEVERITY</span>
 
                 <strong
-                  className={`panel-severity ${selectedFinding.severity.toLowerCase()}`}
+                  className={`panel-severity ${
+                    selectedFinding.severity?.toLowerCase() || ""
+                  }`}
                 >
-                  {selectedFinding.severity}
+                  {selectedFinding.severity || "UNKNOWN"}
                 </strong>
               </div>
 
@@ -368,7 +437,7 @@ function Findings() {
                 <span>DETECTION SCORE</span>
 
                 <strong className="panel-score">
-                  {selectedFinding.score}
+                  {selectedFinding.score ?? "--"}
                 </strong>
               </div>
 
@@ -387,28 +456,28 @@ function Findings() {
                 <div>
                   <span>ARTIFACT</span>
                   <strong>
-                    {selectedFinding.artifact}
+                    {selectedFinding.artifact || "--"}
                   </strong>
                 </div>
 
                 <div>
                   <span>SOURCE</span>
                   <strong>
-                    {selectedFinding.source}
+                    {selectedFinding.source || "--"}
                   </strong>
                 </div>
 
                 <div>
                   <span>TIMESTAMP</span>
                   <strong>
-                    {selectedFinding.timestamp}
+                    {formatTimestamp(selectedFinding.timestamp)}
                   </strong>
                 </div>
 
                 <div>
                   <span>FINDING ID</span>
                   <strong>
-                    {selectedFinding.id}
+                    {selectedFinding.finding_id}
                   </strong>
                 </div>
 
@@ -426,7 +495,7 @@ function Findings() {
 
               <div className="panel-explanation">
 
-                {selectedFinding.explanation}
+                {getExplanation(selectedFinding)}
 
               </div>
 
@@ -442,21 +511,33 @@ function Findings() {
 
               <div className="reason-list">
 
-                {selectedFinding.reasons.map(
-                  (reason, index) => (
+                {selectedFinding.reasons &&
+                selectedFinding.reasons.length > 0 ? (
+                  selectedFinding.reasons.map(
+                    (reason, index) => (
 
-                    <div
-                      className="reason-item"
-                      key={index}
-                    >
-                      <span>✓</span>
+                      <div
+                        className="reason-item"
+                        key={index}
+                      >
+                        <span>✓</span>
 
-                      <p>
-                        {reason}
-                      </p>
-                    </div>
+                        <p>
+                          {reason}
+                        </p>
+                      </div>
 
+                    )
                   )
+                ) : (
+                  <div className="reason-item">
+                    <span>—</span>
+
+                    <p>
+                      No detection reasons were provided by
+                      the backend.
+                    </p>
+                  </div>
                 )}
 
               </div>
