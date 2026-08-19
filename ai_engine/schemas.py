@@ -3,7 +3,7 @@ from typing import List, Optional
 
 
 class Finding(BaseModel):
-    id: str
+    finding_id: str
     artifact: str
     type: str
     severity: str

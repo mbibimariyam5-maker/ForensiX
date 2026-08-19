@@ -1,29 +1,30 @@
-from schemas import Finding
+from fastapi import FastAPI
+from schemas import Finding, Explanation
 from explanation import generate_explanation
 
 
-test_finding = Finding(
-    id="F-001",
-    artifact="suspicious_sample.exe",
-    type="IOC_MATCH",
-    severity="HIGH",
-    score=85,
-    timestamp="2026-08-18T10:24:12",
-    reasons=[
-        "Configured IOC match",
-        "Related suspicious event"
-    ],
-    source="simulator"
+app = FastAPI(
+    title="ForensiX AI Engine",
+    description="AI-assisted explanation engine for forensic findings",
+    version="0.1.0"
 )
 
 
-result = generate_explanation(test_finding)
+@app.get("/")
+def root():
+    return {
+        "service": "ForensiX AI Engine",
+        "status": "running"
+    }
 
-print("AI ENGINE TEST")
-print("=" * 50)
-print("Finding ID:", result.finding_id)
-print("Summary:", result.summary)
-print("Priority:", result.priority_explanation)
-print("Evidence Basis:", result.evidence_basis)
-print("Confidence:", result.confidence)
-print("Disclaimer:", result.disclaimer)
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy"
+    }
+
+
+@app.post("/ai/explain", response_model=Explanation)
+def explain_finding(finding: Finding):
+    return generate_explanation(finding)

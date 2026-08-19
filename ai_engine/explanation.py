@@ -32,7 +32,7 @@ def generate_explanation(finding: Finding) -> Explanation:
         summary += " The source is marked as simulated evidence."
 
     return Explanation(
-        finding_id=finding.id,
+        finding_id=finding.finding_id,
         summary=summary,
         priority_explanation=priority,
         evidence_basis=reasons,
