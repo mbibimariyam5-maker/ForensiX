@@ -1,4 +1,4 @@
-from schemas import Finding, Explanation
+from .schemas import Finding, Explanation
 
 
 def generate_explanation(finding: Finding) -> Explanation:

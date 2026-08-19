@@ -1,6 +1,6 @@
 from fastapi import FastAPI
-from schemas import Finding, Explanation
-from explanation import generate_explanation
+from .schemas import Finding, Explanation
+from .explanation import generate_explanation
 
 
 app = FastAPI(
