@@ -1,0 +1,10 @@
+FORENSIX AI - SAMPLE DIGITAL EVIDENCE
+Case ID: CASE-001
+
+2026-08-19 10:22:31 WARN Failed login: admin
+2026-08-19 10:23:04 WARN Failed login: admin
+2026-08-19 10:23:41 WARN Failed login: admin
+2026-08-19 10:24:12 INFO Successful login: admin
+2026-08-19 10:26:18 WARN Sensitive file accessed: config.txt
+2026-08-19 10:27:03 WARN Archive created: archive.zip
+2026-08-19 10:28:47 WARN Archive accessed: archive.zip
