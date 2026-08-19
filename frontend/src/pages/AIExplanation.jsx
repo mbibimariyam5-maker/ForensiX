@@ -1,65 +1,240 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  getCases,
+  getCaseFindings,
+  getAIExplanation,
+} from "../services/api";
 
 function AIExplanation() {
-  const [selectedFinding, setSelectedFinding] = useState("F-002");
+  const [caseData, setCaseData] = useState(null);
+  const [findings, setFindings] = useState([]);
+  const [selectedFindingId, setSelectedFindingId] = useState(null);
+  const [aiExplanation, setAIExplanation] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [aiLoading, setAILoading] = useState(false);
+  const [error, setError] = useState("");
+  const [aiError, setAIError] = useState("");
 
-  const findings = [
-    {
-      id: "F-002",
-      severity: "CRITICAL",
-      type: "IOC MATCH",
-      score: 94,
-      artifact: "suspicious_file.exe",
-      source: "File Analysis",
-      timestamp: "18 Aug 2026 • 10:18:43",
-      explanation:
-        "The analyzed artifact matched a configured indicator of compromise. The AI identified this result as a high-priority investigation indicator based on the available forensic evidence.",
-      evidence: [
-        "suspicious_file.exe was analyzed",
-        "Configured IOC match was detected",
-        "Detection confidence score is 94",
-        "Source: File Analysis",
-      ],
-    },
-    {
-      id: "F-001",
-      severity: "HIGH",
-      type: "MULTIPLE FAILED LOGINS",
-      score: 85,
-      artifact: "authentication.log",
-      source: "Authentication Logs",
-      timestamp: "18 Aug 2026 • 10:24:12",
-      explanation:
-        "Multiple failed authentication attempts were detected within a short period. The AI classified this pattern as an investigation indicator requiring review.",
-      evidence: [
-        "authentication.log contains repeated failures",
-        "Multiple attempts occurred within a short period",
-        "Activity requires investigator review",
-        "Detection confidence score is 85",
-      ],
-    },
-    {
-      id: "F-003",
-      severity: "MEDIUM",
-      type: "SUSPICIOUS SYSTEM EVENT",
-      score: 59,
-      artifact: "system.log",
-      source: "System Logs",
-      timestamp: "18 Aug 2026 • 09:52:31",
-      explanation:
-        "An unusual system event was identified in the available logs. The AI classified the event as a medium-priority investigation indicator.",
-      evidence: [
-        "system.log contains an unusual event",
-        "Event differs from expected activity",
-        "Additional investigation is recommended",
-        "Detection confidence score is 59",
-      ],
-    },
-  ];
+  useEffect(() => {
+    async function loadFindings() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const casesResponse = await getCases();
+        const cases = casesResponse.cases || [];
+
+        if (cases.length === 0) {
+          setCaseData(null);
+          setFindings([]);
+          return;
+        }
+
+        const currentCase = cases[0];
+        setCaseData(currentCase);
+
+        const findingsResponse = await getCaseFindings(
+          currentCase.case_id
+        );
+
+        const backendFindings = findingsResponse.findings || [];
+
+        setFindings(backendFindings);
+
+        if (backendFindings.length > 0) {
+          setSelectedFindingId(
+            backendFindings[0].finding_id
+          );
+        }
+      } catch (err) {
+        console.error("AI findings API error:", err);
+        setError(
+          err.message || "Failed to load findings."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadFindings();
+  }, []);
 
   const selected = findings.find(
-    (finding) => finding.id === selectedFinding
+    (finding) =>
+      finding.finding_id === selectedFindingId
   );
+
+  useEffect(() => {
+    async function loadAIExplanation() {
+      if (!selected) {
+        setAIExplanation(null);
+        return;
+      }
+
+      try {
+        setAILoading(true);
+        setAIError("");
+
+        const response = await getAIExplanation(selected);
+
+        setAIExplanation(
+          response.explanation || null
+        );
+      } catch (err) {
+        console.error("AI explanation API error:", err);
+        setAIError(
+          err.message ||
+            "Failed to generate AI explanation."
+        );
+        setAIExplanation(null);
+      } finally {
+        setAILoading(false);
+      }
+    }
+
+    loadAIExplanation();
+  }, [selected]);
+
+  function formatTimestamp(timestamp) {
+    if (!timestamp) {
+      return "--";
+    }
+
+    const date = new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) {
+      return timestamp;
+    }
+
+    return date.toLocaleString([], {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  }
+
+  function getExplanationText() {
+    if (aiLoading) {
+      return "Generating AI-assisted explanation...";
+    }
+
+    if (aiError) {
+      return aiError;
+    }
+
+    if (aiExplanation?.summary) {
+      return aiExplanation.summary;
+    }
+
+    return "No AI explanation is available for this finding yet.";
+  }
+
+  function getEvidenceBasis() {
+    if (
+      aiExplanation?.evidence_basis &&
+      aiExplanation.evidence_basis.length > 0
+    ) {
+      return aiExplanation.evidence_basis;
+    }
+
+    if (selected?.reasons && selected.reasons.length > 0) {
+      return selected.reasons;
+    }
+
+    return [
+      "No supporting evidence details were returned by the backend.",
+    ];
+  }
+
+  if (loading) {
+    return (
+      <div className="ai-page">
+        <header className="ai-header">
+          <div>
+            <div className="ai-header-tag">
+              FORENSIC INTELLIGENCE
+            </div>
+
+            <h1>AI Explanation</h1>
+
+            <p>
+              Loading forensic findings...
+            </p>
+          </div>
+        </header>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="ai-page">
+        <header className="ai-header">
+          <div>
+            <div className="ai-header-tag">
+              FORENSIC INTELLIGENCE
+            </div>
+
+            <h1>AI Explanation</h1>
+
+            <p>
+              Unable to load forensic findings.
+            </p>
+          </div>
+        </header>
+
+        <div className="ai-warning">
+          <div className="ai-warning-icon">
+            !
+          </div>
+
+          <div>
+            <strong>API ERROR</strong>
+
+            <p>{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!caseData) {
+    return (
+      <div className="ai-page">
+        <header className="ai-header">
+          <div>
+            <div className="ai-header-tag">
+              FORENSIC INTELLIGENCE
+            </div>
+
+            <h1>AI Explanation</h1>
+
+            <p>
+              No investigation case is available.
+            </p>
+          </div>
+        </header>
+
+        <div className="ai-warning">
+          <div className="ai-warning-icon">
+            !
+          </div>
+
+          <div>
+            <strong>NO ACTIVE CASE</strong>
+
+            <p>
+              Create a case before using AI-assisted
+              finding analysis.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="ai-page">
@@ -84,7 +259,7 @@ function AIExplanation() {
 
         <div className="ai-case">
           <span>ACTIVE CASE</span>
-          <strong>CASE-2026-001</strong>
+          <strong>{caseData.case_id}</strong>
         </div>
 
       </header>
@@ -146,52 +321,62 @@ function AIExplanation() {
             {findings.map((finding) => (
 
               <button
-                key={finding.id}
+                key={finding.finding_id}
                 className={`ai-finding-card ${
-                  selectedFinding === finding.id
+                  selectedFindingId === finding.finding_id
                     ? "selected"
                     : ""
                 }`}
                 onClick={() =>
-                  setSelectedFinding(finding.id)
+                  setSelectedFindingId(
+                    finding.finding_id
+                  )
                 }
               >
 
                 <div className="ai-finding-row">
 
                   <span
-                    className={`ai-severity-indicator ${finding.severity.toLowerCase()}`}
+                    className={`ai-severity-indicator ${
+                      finding.severity?.toLowerCase() || ""
+                    }`}
                   ></span>
 
                   <span className="ai-finding-severity">
-                    {finding.severity}
+                    {finding.severity || "UNKNOWN"}
                   </span>
 
                   <span className="ai-finding-id">
-                    {finding.id}
+                    {finding.finding_id}
                   </span>
 
                 </div>
 
                 <h3>
-                  {finding.type}
+                  {finding.type || "UNKNOWN"}
                 </h3>
 
                 <p>
-                  {finding.artifact}
+                  {finding.artifact || "--"}
                 </p>
 
                 <div className="ai-card-score">
                   DETECTION SCORE
 
                   <strong>
-                    {finding.score}
+                    {finding.score ?? "--"}
                   </strong>
                 </div>
 
               </button>
 
             ))}
+
+            {findings.length === 0 && (
+              <div className="no-findings">
+                No findings available for AI analysis.
+              </div>
+            )}
 
           </div>
 
@@ -216,19 +401,23 @@ function AIExplanation() {
                 </span>
 
                 <h2>
-                  {selected.type}
+                  {selected.type || "UNKNOWN"}
                 </h2>
 
                 <p>
-                  {selected.id} &nbsp;•&nbsp; {selected.source}
+                  {selected.finding_id}
+                  &nbsp;•&nbsp;
+                  {selected.source || "--"}
                 </p>
 
               </div>
 
               <div
-                className={`ai-main-severity ${selected.severity.toLowerCase()}`}
+                className={`ai-main-severity ${
+                  selected.severity?.toLowerCase() || ""
+                }`}
               >
-                {selected.severity}
+                {selected.severity || "UNKNOWN"}
               </div>
 
             </div>
@@ -246,7 +435,7 @@ function AIExplanation() {
 
                 <div>
                   <strong>
-                    {selected.score}
+                    {selected.score ?? "--"}
                   </strong>
 
                   <small>
@@ -262,7 +451,13 @@ function AIExplanation() {
 
                   <div
                     style={{
-                      width: `${selected.score}%`,
+                      width: `${Math.min(
+                        Math.max(
+                          Number(selected.score) || 0,
+                          0
+                        ),
+                        100
+                      )}%`,
                     }}
                   ></div>
 
@@ -311,7 +506,7 @@ function AIExplanation() {
                   <span>ARTIFACT</span>
 
                   <strong>
-                    {selected.artifact}
+                    {selected.artifact || "--"}
                   </strong>
                 </div>
 
@@ -319,7 +514,7 @@ function AIExplanation() {
                   <span>SOURCE</span>
 
                   <strong>
-                    {selected.source}
+                    {selected.source || "--"}
                   </strong>
                 </div>
 
@@ -327,7 +522,9 @@ function AIExplanation() {
                   <span>TIMESTAMP</span>
 
                   <strong>
-                    {selected.timestamp}
+                    {formatTimestamp(
+                      selected.timestamp
+                    )}
                   </strong>
                 </div>
 
@@ -335,7 +532,7 @@ function AIExplanation() {
                   <span>FINDING ID</span>
 
                   <strong>
-                    {selected.id}
+                    {selected.finding_id}
                   </strong>
                 </div>
 
@@ -374,7 +571,7 @@ function AIExplanation() {
                 </div>
 
                 <p>
-                  {selected.explanation}
+                  {getExplanationText()}
                 </p>
 
               </div>
@@ -407,7 +604,7 @@ function AIExplanation() {
 
               <div className="ai-evidence">
 
-                {selected.evidence.map(
+                {getEvidenceBasis().map(
                   (item, index) => (
 
                     <div
@@ -434,6 +631,57 @@ function AIExplanation() {
               </div>
 
             </div>
+
+
+            {/* AI METADATA */}
+
+            {aiExplanation && (
+
+              <div className="ai-block">
+
+                <div className="ai-block-heading">
+
+                  <span>
+                    04
+                  </span>
+
+                  <div>
+                    <small>
+                      AI CONFIDENCE
+                    </small>
+
+                    <h3>
+                      Analysis Metadata
+                    </h3>
+                  </div>
+
+                </div>
+
+                <div className="ai-context">
+
+                  <div>
+                    <span>CONFIDENCE</span>
+
+                    <strong>
+                      {aiExplanation.confidence || "--"}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>STATUS</span>
+
+                    <strong>
+                      {aiError
+                        ? "ERROR"
+                        : "SUCCESS"}
+                    </strong>
+                  </div>
+
+                </div>
+
+              </div>
+
+            )}
 
 
             {/* GROUNDING */}
@@ -477,10 +725,8 @@ function AIExplanation() {
                 </strong>
 
                 <p>
-                  AI output is decision-support information.
-                  Validate this explanation against the
-                  underlying forensic evidence before
-                  drawing conclusions.
+                  {aiExplanation?.disclaimer ||
+                    "AI output is decision-support information. Validate this explanation against the underlying forensic evidence before drawing conclusions."}
                 </p>
 
               </div>

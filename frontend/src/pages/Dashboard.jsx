@@ -1,4 +1,142 @@
+import { useEffect, useState } from "react";
+import {
+  getCases,
+  getCaseEvidence,
+  getCaseFindings,
+} from "../services/api";
+
 function Dashboard() {
+  const [caseData, setCaseData] = useState(null);
+  const [evidence, setEvidence] = useState([]);
+  const [findings, setFindings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const casesResponse = await getCases();
+
+        const cases = casesResponse.cases || [];
+
+        if (cases.length === 0) {
+          setCaseData(null);
+          setEvidence([]);
+          setFindings([]);
+          return;
+        }
+
+        const currentCase = cases[0];
+        setCaseData(currentCase);
+
+        const [evidenceResponse, findingsResponse] = await Promise.all([
+          getCaseEvidence(currentCase.case_id),
+          getCaseFindings(currentCase.case_id),
+        ]);
+
+        setEvidence(evidenceResponse.evidence || []);
+        setFindings(findingsResponse.findings || []);
+      } catch (err) {
+        console.error("Dashboard API error:", err);
+        setError(err.message || "Failed to load dashboard data.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDashboard();
+  }, []);
+
+  const highRiskCount = findings.filter(
+    (finding) =>
+      String(finding.severity).toUpperCase() === "HIGH" ||
+      String(finding.severity).toUpperCase() === "CRITICAL"
+  ).length;
+
+  const recentFindings = [...findings]
+    .sort((a, b) => {
+      return (
+        new Date(b.timestamp || 0).getTime() -
+        new Date(a.timestamp || 0).getTime()
+      );
+    })
+    .slice(0, 3);
+
+  function formatTime(timestamp) {
+    if (!timestamp) return "--:--:--";
+
+    const date = new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) {
+      return timestamp;
+    }
+
+    return date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+  }
+
+  function getFindingTitle(finding) {
+    if (finding.type) {
+      return String(finding.type).replaceAll("_", " ");
+    }
+
+    return "Finding";
+  }
+
+  if (loading) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header">
+          <div>
+            <h1>Investigation Overview</h1>
+            <p>Loading investigation data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header">
+          <div>
+            <h1>Investigation Overview</h1>
+            <p>Unable to load investigation data.</p>
+          </div>
+        </div>
+
+        <div className="section-card">
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!caseData) {
+    return (
+      <div className="dashboard">
+        <div className="dashboard-header">
+          <div>
+            <h1>Investigation Overview</h1>
+            <p>No cases are available yet.</p>
+          </div>
+        </div>
+
+        <div className="section-card">
+          <p>Create a case in the backend to display investigation data here.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="dashboard">
 
@@ -11,7 +149,7 @@ function Dashboard() {
 
         <div className="case-info">
           <span>CASE</span>
-          <strong>CASE-2026-001</strong>
+          <strong>{caseData.case_id}</strong>
         </div>
       </div>
 
@@ -20,25 +158,27 @@ function Dashboard() {
 
         <div className="stat-card">
           <h3>Total Evidence</h3>
-          <div className="stat-value">24</div>
+          <div className="stat-value">{evidence.length}</div>
           <small>Collected items</small>
         </div>
 
         <div className="stat-card">
           <h3>Artifacts</h3>
-          <div className="stat-value">186</div>
-          <small>Extracted artifacts</small>
+          <div className="stat-value">--</div>
+          <small>Awaiting artifact count API</small>
         </div>
 
         <div className="stat-card">
           <h3>Findings</h3>
-          <div className="stat-value">17</div>
+          <div className="stat-value">{findings.length}</div>
           <small>Detected findings</small>
         </div>
 
         <div className="stat-card">
           <h3>High Risk</h3>
-          <div className="stat-value">05</div>
+          <div className="stat-value">
+            {String(highRiskCount).padStart(2, "0")}
+          </div>
           <small>Requires attention</small>
         </div>
 
@@ -61,16 +201,16 @@ function Dashboard() {
             <div className="risk-card">
 
               <div className="risk-circle">
-                <strong>78</strong>
+                <strong>--</strong>
                 <span>PRIORITY</span>
               </div>
 
               <div className="risk-info">
-                <h3>HIGH PRIORITY</h3>
+                <h3>AWAITING RISK DATA</h3>
 
                 <p>
-                  Multiple findings require investigator attention.
-                  Review high-severity findings and related evidence.
+                  Case-level priority will be connected when the backend
+                  provides the risk or priority result.
                 </p>
               </div>
 
@@ -81,7 +221,7 @@ function Dashboard() {
 
               <div className="integrity-top">
                 <span>Evidence Integrity</span>
-                <strong>100% VERIFIED</strong>
+                <strong>AWAITING VERIFICATION API</strong>
               </div>
 
               <div className="progress-bar">
@@ -98,69 +238,49 @@ function Dashboard() {
 
             <div className="section-header">
               <h2>Recent Findings</h2>
-              <span>3 RECENT</span>
+              <span>{recentFindings.length} RECENT</span>
             </div>
 
             <div className="findings-list">
 
-              <div className="finding-card">
-
-                <span className="severity high">
-                  HIGH
-                </span>
-
-                <div className="finding-content">
-                  <h3>Multiple Failed Logins</h3>
-                  <p>
-                    Authentication logs • 10:24:12
-                  </p>
+              {recentFindings.length === 0 ? (
+                <div className="finding-card">
+                  <div className="finding-content">
+                    <h3>No findings available</h3>
+                    <p>No findings have been returned for this case.</p>
+                  </div>
                 </div>
+              ) : (
+                recentFindings.map((finding) => (
+                  <div
+                    className="finding-card"
+                    key={finding.finding_id}
+                  >
 
-                <span className="finding-score">
-                  85
-                </span>
+                    <span
+                      className={`severity ${String(
+                        finding.severity || "medium"
+                      ).toLowerCase()}`}
+                    >
+                      {finding.severity || "UNKNOWN"}
+                    </span>
 
-              </div>
+                    <div className="finding-content">
+                      <h3>{getFindingTitle(finding)}</h3>
 
+                      <p>
+                        {finding.artifact || "Unknown artifact"} •{" "}
+                        {formatTime(finding.timestamp)}
+                      </p>
+                    </div>
 
-              <div className="finding-card">
+                    <span className="finding-score">
+                      {finding.score ?? "--"}
+                    </span>
 
-                <span className="severity medium">
-                  MEDIUM
-                </span>
-
-                <div className="finding-content">
-                  <h3>IOC Match</h3>
-                  <p>
-                    example.exe • 10:18:43
-                  </p>
-                </div>
-
-                <span className="finding-score">
-                  64
-                </span>
-
-              </div>
-
-
-              <div className="finding-card">
-
-                <span className="severity medium">
-                  MEDIUM
-                </span>
-
-                <div className="finding-content">
-                  <h3>Suspicious Event</h3>
-                  <p>
-                    system.log • 09:52:31
-                  </p>
-                </div>
-
-                <span className="finding-score">
-                  59
-                </span>
-
-              </div>
+                  </div>
+                ))
+              )}
 
             </div>
 
@@ -184,52 +304,14 @@ function Dashboard() {
 
               <div className="timeline-item">
                 <span className="timeline-time">
-                  10:24:12
+                  --
                 </span>
 
-                <h4>Multiple failed login attempts</h4>
+                <h4>Timeline API pending</h4>
 
                 <p>
-                  Authentication event detected
-                </p>
-              </div>
-
-
-              <div className="timeline-item">
-                <span className="timeline-time">
-                  10:18:43
-                </span>
-
-                <h4>IOC match detected</h4>
-
-                <p>
-                  Suspicious artifact identified
-                </p>
-              </div>
-
-
-              <div className="timeline-item">
-                <span className="timeline-time">
-                  09:52:31
-                </span>
-
-                <h4>System event recorded</h4>
-
-                <p>
-                  Event added to investigation timeline
-                </p>
-              </div>
-
-
-              <div className="timeline-item">
-                <span className="timeline-time">
-                  09:30:05
-                </span>
-
-                <h4>Evidence acquisition completed</h4>
-
-                <p>
-                  Evidence integrity verified
+                  Timeline events will be connected when the backend endpoint
+                  is available.
                 </p>
               </div>
 
@@ -240,8 +322,8 @@ function Dashboard() {
 
           {/* INVESTIGATION NOTE */}
           <div className="investigation-note">
-            Priority score is an investigation aid, not proof
-            of malicious activity.
+            Priority score and evidence verification will be connected
+            when their backend data sources are available.
           </div>
 
         </div>
@@ -253,3 +335,4 @@ function Dashboard() {
 }
 
 export default Dashboard;
+
