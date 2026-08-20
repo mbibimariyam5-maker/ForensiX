@@ -1,7 +1,10 @@
 import hashlib
 import json
-import mimetypes
+from datetime import datetime
 from pathlib import Path
+
+from backend.database import create_timeline_event
+from forensic.timeline import EventType, TimelineAnalyzer, TimelineEvent
 
 
 def calculate_sha256(file_path):
@@ -43,6 +46,83 @@ def get_artifact_type(file_path):
     return artifact_types.get(extension, "UNKNOWN")
 
 
+def _create_timeline_from_file(path, case_id, sha256, artifact_type, file_stats):
+    """Create supported filesystem and chain-of-custody events for evidence."""
+    analyzer = TimelineAnalyzer()
+
+    metadata = {
+        "case_id": case_id,
+        "filename": path.name,
+        "sha256": sha256,
+        "artifact_type": artifact_type,
+        "file_path": str(path),
+        "timestamp_source": "evidence_storage_and_filesystem",
+    }
+
+    # Chain-of-custody: record the moment the evidence entered the case.
+    analyzer.add_event(
+        TimelineEvent(
+            timestamp=datetime.now(),
+            event_type=EventType.OTHER,
+            source="chain_of_custody",
+            description=f"Chain of custody: Evidence received and registered: {path.name}",
+            metadata={
+                **metadata,
+                "custody_action": "EVIDENCE_RECEIVED",
+                "custody_status": "REGISTERED",
+            },
+        )
+    )
+
+    # Chain-of-custody: record the original forensic hash captured at ingestion.
+    analyzer.add_event(
+        TimelineEvent(
+            timestamp=datetime.now(),
+            event_type=EventType.OTHER,
+            source="chain_of_custody",
+            description=f"Chain of custody: SHA-256 recorded for {path.name}",
+            metadata={
+                **metadata,
+                "custody_action": "HASH_RECORDED",
+                "custody_status": "INTEGRITY_BASELINE",
+            },
+        )
+    )
+
+    # The evidence file is created in the ForensiX evidence-storage location
+    # when the upload is accepted. Using the current ingestion time makes the
+    # creation event deterministic even when filesystem ctime semantics vary.
+    analyzer.add_event(
+        TimelineEvent(
+            timestamp=datetime.now(),
+            event_type=EventType.FILE_CREATION,
+            source="evidence_processing",
+            description=f"Evidence file created in evidence storage: {path.name}",
+            metadata={**metadata, "timestamp_field": "evidence_created"},
+        )
+    )
+
+    analyzer.add_event(
+        TimelineEvent(
+            timestamp=datetime.fromtimestamp(file_stats.st_mtime),
+            event_type=EventType.FILE_MODIFICATION,
+            source="evidence_processing",
+            description=f"Evidence file modified: {path.name}",
+            metadata={**metadata, "timestamp_field": "modified"},
+        )
+    )
+
+    for event in analyzer.get_sorted_events():
+        create_timeline_event(
+            case_id=case_id,
+            timestamp=event.timestamp.isoformat(),
+            event_type=event.event_type.value,
+            source=event.source,
+            description=event.description,
+            metadata=json.dumps(event.metadata),
+        )
+
+
 def process_evidence(file_path, case_id):
     """Process an evidence artifact and create the backend JSON payload."""
 
@@ -51,9 +131,18 @@ def process_evidence(file_path, case_id):
     if not path.is_file():
         raise FileNotFoundError(f"Evidence file not found: {file_path}")
 
+    file_stats = path.stat()
     sha256 = calculate_sha256(path)
-    size_bytes = path.stat().st_size
+    size_bytes = file_stats.st_size
     artifact_type = get_artifact_type(path)
+
+    _create_timeline_from_file(
+        path,
+        case_id,
+        sha256,
+        artifact_type,
+        file_stats,
+    )
 
     evidence = {
         "case_id": case_id,
@@ -70,10 +159,7 @@ def process_evidence(file_path, case_id):
 
 if __name__ == "__main__":
 
-    # Change this to your actual evidence file
     evidence_file = "test_evidence.txt"
-
-    # Case ID provided by the investigation
     case_id = "CASE-001"
 
     try:

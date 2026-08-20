@@ -5,10 +5,8 @@ function Sidebar({ activePage, setActivePage }) {
 
   return (
     <aside className="sidebar">
-
       {/* LOGO */}
       <div className="logo">
-
         <div className="logo-mark">
           F
         </div>
@@ -17,17 +15,13 @@ function Sidebar({ activePage, setActivePage }) {
           <h2>FORENSIX</h2>
           <span>AI INVESTIGATION</span>
         </div>
-
       </div>
-
 
       {/* NAVIGATION */}
       <nav className="navigation">
-
         <p className="nav-title">
           INVESTIGATION
         </p>
-
 
         {/* DASHBOARD */}
         <button
@@ -40,6 +34,16 @@ function Sidebar({ activePage, setActivePage }) {
           Dashboard
         </button>
 
+        {/* CASES */}
+        <button
+          className={`nav-item ${
+            activePage === "cases" ? "active" : ""
+          }`}
+          onClick={() => handleNavigation("cases")}
+        >
+          <span>▦</span>
+          Cases
+        </button>
 
         {/* EVIDENCE */}
         <button
@@ -52,7 +56,6 @@ function Sidebar({ activePage, setActivePage }) {
           Evidence
         </button>
 
-
         {/* FINDINGS */}
         <button
           className={`nav-item ${
@@ -63,7 +66,6 @@ function Sidebar({ activePage, setActivePage }) {
           <span>⚠</span>
           Findings
         </button>
-
 
         {/* AI EXPLANATION */}
         <button
@@ -76,7 +78,6 @@ function Sidebar({ activePage, setActivePage }) {
           AI Explanation
         </button>
 
-
         {/* TIMELINE */}
         <button
           className={`nav-item ${
@@ -88,7 +89,6 @@ function Sidebar({ activePage, setActivePage }) {
           Timeline
         </button>
 
-
         {/* REPORTS */}
         <button
           className={`nav-item ${
@@ -99,19 +99,15 @@ function Sidebar({ activePage, setActivePage }) {
           <span>▤</span>
           Reports
         </button>
-
       </nav>
-
 
       {/* SYSTEM STATUS */}
       <div className="sidebar-bottom">
-
         <p className="nav-title">
           SYSTEM
         </p>
 
         <div className="system-status">
-
           <span className="status-dot"></span>
 
           <div>
@@ -123,11 +119,8 @@ function Sidebar({ activePage, setActivePage }) {
               All services operational
             </small>
           </div>
-
         </div>
-
       </div>
-
     </aside>
   );
 }
