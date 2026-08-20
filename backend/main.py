@@ -12,10 +12,17 @@ from backend.database import (
     create_evidence,
     get_case_evidence,
     create_finding,
-    get_case_findings
+    get_case_findings,
+    create_timeline_event,
+    get_case_timeline
 )
 
-from backend.schemas import EvidenceCreate, FindingCreate
+from backend.schemas import (
+    EvidenceCreate,
+    FindingCreate,
+    TimelineEventCreate
+)
+
 from backend.ai_adapter import explain_finding
 
 
@@ -310,3 +317,70 @@ def explain_finding_api(finding: FindingCreate):
             status_code=502,
             detail=str(error)
         )
+
+
+# =========================================================
+# TIMELINE APIs
+# =========================================================
+
+@app.post("/api/timeline")
+def add_timeline_event(event: TimelineEventCreate):
+
+    case = get_case(event.case_id)
+
+    if case is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Case not found"
+        )
+
+    metadata_json = json.dumps(event.metadata)
+
+    create_timeline_event(
+        case_id=event.case_id,
+        timestamp=event.timestamp,
+        event_type=event.event_type,
+        source=event.source,
+        description=event.description,
+        metadata=metadata_json
+    )
+
+    return {
+        "status": "success",
+        "message": "Timeline event stored successfully",
+        "event": {
+            "case_id": event.case_id,
+            "timestamp": event.timestamp,
+            "event_type": event.event_type,
+            "source": event.source,
+            "description": event.description,
+            "metadata": event.metadata
+        }
+    }
+
+
+@app.get("/api/cases/{case_id}/timeline")
+def list_case_timeline(case_id: str):
+
+    case = get_case(case_id)
+
+    if case is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Case not found"
+        )
+
+    events = get_case_timeline(case_id)
+
+    for event in events:
+        try:
+            event["metadata"] = json.loads(event["metadata"])
+        except (json.JSONDecodeError, TypeError):
+            event["metadata"] = {}
+
+    return {
+        "status": "success",
+        "case_id": case_id,
+        "count": len(events),
+        "events": events
+    }

@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from typing import Any
 
 
 class EvidenceCreate(BaseModel):
@@ -21,3 +22,12 @@ class FindingCreate(BaseModel):
     timestamp: str
     reasons: list[str]
     source: str = "detection_engine"
+
+
+class TimelineEventCreate(BaseModel):
+    case_id: str
+    timestamp: str
+    event_type: str
+    source: str
+    description: str
+    metadata: dict[str, Any] = {}

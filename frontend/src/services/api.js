@@ -11,6 +11,7 @@ export async function getCases() {
   return response.json();
 }
 
+
 // Get evidence for a specific case
 export async function getCaseEvidence(caseId) {
   const response = await fetch(
@@ -24,6 +25,7 @@ export async function getCaseEvidence(caseId) {
   return response.json();
 }
 
+
 // Get findings for a specific case
 export async function getCaseFindings(caseId) {
   const response = await fetch(
@@ -36,6 +38,21 @@ export async function getCaseFindings(caseId) {
 
   return response.json();
 }
+
+
+// Get timeline events for a specific case
+export async function getCaseTimeline(caseId) {
+  const response = await fetch(
+    `${API_BASE_URL}/cases/${caseId}/timeline`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch timeline: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 
 // Get AI explanation for a complete finding
 export async function getAIExplanation(finding) {

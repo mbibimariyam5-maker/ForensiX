@@ -1,23 +1,148 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+  getCases,
+  getCaseEvidence,
+  getCaseFindings,
+  getCaseTimeline,
+} from "../services/api";
 
 function Reports() {
   const [reportStatus, setReportStatus] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const [caseData, setCaseData] = useState(null);
+  const [evidence, setEvidence] = useState([]);
+  const [findings, setFindings] = useState([]);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+
+  useEffect(() => {
+    async function loadReportData() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const casesResponse = await getCases();
+
+        const cases = casesResponse.cases || [];
+
+        if (cases.length === 0) {
+          setError("No investigation case found.");
+          setLoading(false);
+          return;
+        }
+
+        const currentCase = cases[0];
+
+        setCaseData(currentCase);
+
+        const [
+          evidenceResponse,
+          findingsResponse,
+          timelineResponse,
+        ] = await Promise.all([
+          getCaseEvidence(currentCase.case_id),
+          getCaseFindings(currentCase.case_id),
+          getCaseTimeline(currentCase.case_id),
+        ]);
+
+        setEvidence(evidenceResponse.evidence || []);
+        setFindings(findingsResponse.findings || []);
+        setTimelineEvents(timelineResponse.events || []);
+
+        setLoading(false);
+      } catch (err) {
+        console.error("Failed to load report data:", err);
+        setError("Failed to load report data from the backend.");
+        setLoading(false);
+      }
+    }
+
+    loadReportData();
+  }, []);
+
+  const totalEvidence = evidence.length;
+  const totalFindings = findings.length;
+
+  /*
+   * The backend currently stores evidence SHA-256 values,
+   * but the original evidence files are not available for
+   * recalculation. Therefore we must not claim that the
+   * evidence has been cryptographically verified.
+   */
+  const integrityStatus =
+    totalEvidence > 0
+      ? "VERIFICATION PENDING"
+      : "NO EVIDENCE";
+
+  const criticalFindings = findings.filter(
+    (finding) =>
+      String(finding.severity || "").toUpperCase() === "CRITICAL"
+  ).length;
+
+  const highFindings = findings.filter(
+    (finding) =>
+      String(finding.severity || "").toUpperCase() === "HIGH"
+  ).length;
+
+  const mediumFindings = findings.filter(
+    (finding) =>
+      String(finding.severity || "").toUpperCase() === "MEDIUM"
+  ).length;
+
+  const lowFindings = findings.filter(
+    (finding) =>
+      String(finding.severity || "").toUpperCase() === "LOW"
+  ).length;
+
+  const highCriticalFindings =
+    criticalFindings + highFindings;
+
+  const investigationPriority =
+    findings.length > 0
+      ? Math.round(
+          findings.reduce(
+            (total, finding) =>
+              total + Number(finding.score || 0),
+            0
+          ) / findings.length
+        )
+      : 0;
 
   const handleGenerate = () => {
     setReportStatus("Report generated successfully");
   };
 
   const handleJSON = () => {
+    if (!caseData) {
+      setReportStatus("No case data available");
+      return;
+    }
+
     const reportData = {
-      case_id: "CASE-2026-001",
-      total_evidence: 24,
-      verified_evidence: 24,
-      artifacts: 186,
-      findings: 17,
-      critical_findings: 2,
-      high_findings: 5,
-      investigation_priority: 78,
-      evidence_integrity: "100%",
+      case_id: caseData.case_id,
+      case_name: caseData.case_name,
+      description: caseData.description,
+      status: caseData.status,
+
+      statistics: {
+        total_evidence: totalEvidence,
+        findings: totalFindings,
+        critical_findings: criticalFindings,
+        high_findings: highFindings,
+        medium_findings: mediumFindings,
+        low_findings: lowFindings,
+        investigation_priority: investigationPriority,
+        evidence_integrity: integrityStatus,
+        timeline_events: timelineEvents.length,
+      },
+
+      evidence,
+      findings,
+      timeline: timelineEvents,
+
+      generated_by: "FORENSIX",
+      report_type: "DIGITAL FORENSICS",
     };
 
     const blob = new Blob(
@@ -32,9 +157,11 @@ function Reports() {
     const link = document.createElement("a");
 
     link.href = url;
-    link.download = "CASE-2026-001-report.json";
+    link.download = `${caseData.case_id}-report.json`;
 
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
 
     URL.revokeObjectURL(url);
 
@@ -46,6 +173,36 @@ function Reports() {
       "PDF generation will be connected to the backend"
     );
   };
+
+  if (loading) {
+    return (
+      <div className="reports-page">
+        <div className="report-status">
+          Loading investigation report data...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="reports-page">
+        <div className="report-status">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
+  if (!caseData) {
+    return (
+      <div className="reports-page">
+        <div className="report-status">
+          No investigation case available.
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="reports-page">
@@ -78,7 +235,7 @@ function Reports() {
           </span>
 
           <strong>
-            CASE-2026-001
+            {caseData.case_id}
           </strong>
 
         </div>
@@ -116,11 +273,11 @@ function Reports() {
             </span>
 
             <h2>
-              CASE-2026-001
+              {caseData.case_id}
             </h2>
 
             <p>
-              ForensiX AI-Assisted Digital Forensic Investigation
+              {caseData.case_name}
             </p>
 
           </div>
@@ -133,11 +290,15 @@ function Reports() {
             </span>
 
             <strong>
-              78
+              {investigationPriority}
             </strong>
 
             <small>
-              HIGH PRIORITY
+              {investigationPriority >= 70
+                ? "HIGH PRIORITY"
+                : investigationPriority >= 40
+                  ? "MEDIUM PRIORITY"
+                  : "LOW PRIORITY"}
             </small>
 
           </div>
@@ -154,8 +315,8 @@ function Reports() {
 
           <div>
             <span>EVIDENCE STATUS</span>
-            <strong className="report-success">
-              VERIFIED
+            <strong>
+              {integrityStatus}
             </strong>
           </div>
 
@@ -189,7 +350,7 @@ function Reports() {
           </span>
 
           <strong>
-            24
+            {totalEvidence}
           </strong>
 
           <small>
@@ -206,11 +367,11 @@ function Reports() {
           </span>
 
           <strong>
-            186
+            {totalEvidence}
           </strong>
 
           <small>
-            Extracted artifacts
+            Available evidence records
           </small>
 
         </div>
@@ -223,7 +384,7 @@ function Reports() {
           </span>
 
           <strong>
-            17
+            {totalFindings}
           </strong>
 
           <small>
@@ -240,7 +401,7 @@ function Reports() {
           </span>
 
           <strong className="report-danger">
-            07
+            {String(highCriticalFindings).padStart(2, "0")}
           </strong>
 
           <small>
@@ -285,10 +446,12 @@ function Reports() {
 
               <div>
                 <strong>Critical</strong>
-                <small>2 findings</small>
+                <small>{criticalFindings} findings</small>
               </div>
 
-              <b>02</b>
+              <b>
+                {String(criticalFindings).padStart(2, "0")}
+              </b>
             </div>
 
 
@@ -297,10 +460,12 @@ function Reports() {
 
               <div>
                 <strong>High</strong>
-                <small>5 findings</small>
+                <small>{highFindings} findings</small>
               </div>
 
-              <b>05</b>
+              <b>
+                {String(highFindings).padStart(2, "0")}
+              </b>
             </div>
 
 
@@ -309,10 +474,12 @@ function Reports() {
 
               <div>
                 <strong>Medium</strong>
-                <small>6 findings</small>
+                <small>{mediumFindings} findings</small>
               </div>
 
-              <b>06</b>
+              <b>
+                {String(mediumFindings).padStart(2, "0")}
+              </b>
             </div>
 
 
@@ -321,10 +488,12 @@ function Reports() {
 
               <div>
                 <strong>Low</strong>
-                <small>4 findings</small>
+                <small>{lowFindings} findings</small>
               </div>
 
-              <b>04</b>
+              <b>
+                {String(lowFindings).padStart(2, "0")}
+              </b>
             </div>
 
           </div>
@@ -356,18 +525,19 @@ function Reports() {
           <div className="integrity-report">
 
             <div className="integrity-icon">
-              ✓
+              !
             </div>
 
             <div>
 
               <strong>
-                100% VERIFIED
+                VERIFICATION PENDING
               </strong>
 
               <p>
-                All collected evidence passed SHA-256
-                integrity verification.
+                SHA-256 values are recorded for the evidence,
+                but the original evidence files are currently
+                unavailable for hash recalculation.
               </p>
 
             </div>
@@ -379,16 +549,16 @@ function Reports() {
 
             <div>
               <span>COLLECTED</span>
-              <strong>24</strong>
+              <strong>{totalEvidence}</strong>
+            </div>
+
+            <div>
+              <span>HASH RECORDED</span>
+              <strong>{totalEvidence}</strong>
             </div>
 
             <div>
               <span>VERIFIED</span>
-              <strong>24</strong>
-            </div>
-
-            <div>
-              <span>MISMATCH</span>
               <strong>00</strong>
             </div>
 
@@ -445,8 +615,8 @@ function Reports() {
           </div>
 
           <div>
-            <span>✓</span>
-            Evidence integrity
+            <span>!</span>
+            Integrity verification pending
           </div>
 
         </div>
@@ -518,7 +688,8 @@ function Reports() {
         Generated reports represent the current investigation
         state. AI-generated explanations are decision-support
         information and should be validated against the underlying
-        forensic evidence.
+        forensic evidence. SHA-256 integrity verification remains
+        pending until the original evidence files are available.
 
       </div>
 
