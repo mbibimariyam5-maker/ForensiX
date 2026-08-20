@@ -1,0 +1,144 @@
+[
+  {
+    "event_id": "E-PROC-001",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:24:12+00:00",
+    "category": "process",
+    "artifact": "example.exe",
+    "action": "execute",
+    "actor": "user1",
+    "source": "simulator",
+    "attributes": {
+      "path": "C:\\Temp\\example.exe",
+      "process_name": "example.exe",
+      "parent_process": "powershell.exe"
+    }
+  },
+  {
+    "event_id": "E-FILE-001",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:25:12+00:00",
+    "category": "file",
+    "artifact": "payload.exe",
+    "action": "create",
+    "actor": "user1",
+    "source": "simulator",
+    "attributes": {
+      "path": "C:\\Users\\user1\\Downloads\\payload.exe"
+    }
+  },
+  {
+    "event_id": "E-NET-001",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:26:12+00:00",
+    "category": "network",
+    "artifact": "10.10.10.50",
+    "action": "connection",
+    "actor": "example.exe",
+    "source": "simulator",
+    "attributes": {
+      "destination_ip": "10.10.10.50",
+      "destination_port": 4444
+    }
+  },
+  {
+    "event_id": "E-AUTH-001",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:27:00+00:00",
+    "category": "authentication",
+    "artifact": "admin",
+    "action": "login_failed",
+    "actor": "admin",
+    "source": "system_events.log",
+    "attributes": {
+      "username": "admin"
+    }
+  },
+  {
+    "event_id": "E-AUTH-002",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:27:20+00:00",
+    "category": "authentication",
+    "artifact": "admin",
+    "action": "login_failed",
+    "actor": "admin",
+    "source": "system_events.log",
+    "attributes": {
+      "username": "admin"
+    }
+  },
+  {
+    "event_id": "E-AUTH-003",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:27:40+00:00",
+    "category": "authentication",
+    "artifact": "admin",
+    "action": "login_failed",
+    "actor": "admin",
+    "source": "system_events.log",
+    "attributes": {
+      "username": "admin"
+    }
+  },
+  {
+    "event_id": "E-AUTH-004",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:28:00+00:00",
+    "category": "authentication",
+    "artifact": "admin",
+    "action": "login_failed",
+    "actor": "admin",
+    "source": "system_events.log",
+    "attributes": {
+      "username": "admin"
+    }
+  },
+  {
+    "event_id": "E-AUTH-005",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:28:20+00:00",
+    "category": "authentication",
+    "artifact": "admin",
+    "action": "login_failed",
+    "actor": "admin",
+    "source": "system_events.log",
+    "attributes": {
+      "username": "admin"
+    }
+  },
+  {
+    "event_id": "E-USB-001",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:29:12+00:00",
+    "category": "usb",
+    "artifact": "USB-001",
+    "action": "device_connected",
+    "actor": "admin",
+    "source": "system_events.log",
+    "attributes": {}
+  },
+  {
+    "event_id": "E-PRIV-001",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:30:12+00:00",
+    "category": "privilege",
+    "artifact": "admin",
+    "action": "privilege_escalation",
+    "actor": "admin",
+    "source": "system_events.log",
+    "attributes": {}
+  },
+  {
+    "event_id": "E-IOC-001",
+    "case_id": "C-001",
+    "timestamp": "2026-08-19T10:31:12+00:00",
+    "category": "file",
+    "artifact": "sample.bin",
+    "action": "observed",
+    "actor": "admin",
+    "source": "system_events.log",
+    "attributes": {
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+]
