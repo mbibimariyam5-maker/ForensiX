@@ -308,23 +308,6 @@ function Reports() {
       </div>
 
 
-      {/* REPORT STATUS */}
-
-      {reportStatus && (
-
-        <div className="report-status">
-
-          <span>
-            ✓
-          </span>
-
-          {reportStatus}
-
-        </div>
-
-      )}
-
-
       {/* CASE OVERVIEW */}
 
       <div className="report-overview">
@@ -772,6 +755,18 @@ function Reports() {
         </div>
 
       </section>
+
+
+      {/* REPORT STATUS - OUTSIDE THE REPORT GENERATION BOX */}
+
+      {reportStatus && (
+        <div className="report-status">
+          <span>
+            ✓
+          </span>
+          {reportStatus}
+        </div>
+      )}
 
 
       {/* NOTE */}
