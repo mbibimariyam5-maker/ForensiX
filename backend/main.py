@@ -1,7 +1,10 @@
 from datetime import datetime
+import hashlib
 import json
+import mimetypes
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 
 from backend.database import (
@@ -12,10 +15,17 @@ from backend.database import (
     create_evidence,
     get_case_evidence,
     create_finding,
-    get_case_findings
+    get_case_findings,
+    create_timeline_event,
+    get_case_timeline
 )
 
-from backend.schemas import EvidenceCreate, FindingCreate
+from backend.schemas import (
+    EvidenceCreate,
+    FindingCreate,
+    TimelineEventCreate
+)
+
 from backend.ai_adapter import explain_finding
 
 
@@ -37,47 +47,18 @@ class CaseCreate(BaseModel):
 
 
 # =========================================================
-# STARTUP
-# =========================================================
-
-@app.on_event("startup")
-def startup():
-    initialize_database()
-
-
-# =========================================================
-# BASIC APIs
-# =========================================================
-
-@app.get("/")
-def home():
-    return {
-        "project": "ForensiX AI",
-        "role": "Backend API",
-        "status": "running"
-    }
-
-
-@app.get("/health")
-def health():
-    return {
-        "status": "healthy"
-    }
-
-
-# =========================================================
 # CASE APIs
 # =========================================================
 
 @app.post("/api/cases")
-def create_new_case(case: CaseCreate):
+def add_case(case: CaseCreate):
 
     existing_case = get_case(case.case_id)
 
     if existing_case is not None:
         raise HTTPException(
             status_code=409,
-            detail="Case ID already exists"
+            detail="Case already exists"
         )
 
     created_at = datetime.now().isoformat()
@@ -115,7 +96,7 @@ def list_cases():
 
 
 @app.get("/api/cases/{case_id}")
-def get_case_details(case_id: str):
+def get_single_case(case_id: str):
 
     case = get_case(case_id)
 
@@ -175,6 +156,142 @@ def add_evidence(evidence: EvidenceCreate):
     }
 
 
+@app.post("/api/evidence/upload")
+async def upload_evidence(
+    case_id: str = Form(...),
+    file: UploadFile = File(...)
+):
+
+    case = get_case(case_id)
+
+    if case is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Case not found"
+        )
+
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file must have a filename"
+        )
+
+    safe_filename = Path(file.filename).name
+
+    evidence_directory = (
+        Path(__file__).resolve().parent.parent / "evidence_storage" / case_id
+    )
+
+    evidence_directory.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    destination = evidence_directory / safe_filename
+
+    if destination.exists():
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        destination = (
+            evidence_directory
+            / f"{destination.stem}_{timestamp}{destination.suffix}"
+        )
+
+    sha256 = hashlib.sha256()
+    size_bytes = 0
+
+    try:
+        with destination.open("wb") as output_file:
+
+            while True:
+                chunk = await file.read(1024 * 1024)
+
+                if not chunk:
+                    break
+
+                output_file.write(chunk)
+                sha256.update(chunk)
+                size_bytes += len(chunk)
+
+    except Exception as exc:
+
+        if destination.exists():
+            destination.unlink()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to store evidence file: {exc}"
+        )
+
+    finally:
+        await file.close()
+
+    artifact_type = (
+        mimetypes.guess_type(safe_filename)[0]
+        or "application/octet-stream"
+    )
+
+    extension = Path(safe_filename).suffix.lower()
+
+    artifact_type_map = {
+        ".exe": "EXECUTABLE",
+        ".dll": "EXECUTABLE",
+        ".bin": "BINARY",
+        ".log": "LOG",
+        ".txt": "TEXT",
+        ".csv": "CSV",
+        ".json": "JSON",
+        ".zip": "ARCHIVE",
+        ".rar": "ARCHIVE",
+        ".7z": "ARCHIVE",
+        ".pdf": "DOCUMENT",
+        ".doc": "DOCUMENT",
+        ".docx": "DOCUMENT",
+        ".xls": "DOCUMENT",
+        ".xlsx": "DOCUMENT",
+        ".jpg": "IMAGE",
+        ".jpeg": "IMAGE",
+        ".png": "IMAGE",
+    }
+
+    artifact_type = artifact_type_map.get(
+        extension,
+        artifact_type
+    )
+
+    file_sha256 = sha256.hexdigest()
+    created_at = datetime.now().isoformat()
+
+    relative_path = destination.relative_to(
+        Path(__file__).resolve().parent.parent
+    )
+
+    create_evidence(
+        case_id=case_id,
+        filename=safe_filename,
+        file_path=str(relative_path),
+        sha256=file_sha256,
+        size_bytes=size_bytes,
+        artifact_type=artifact_type,
+        source="evidence_upload",
+        created_at=created_at
+    )
+
+    return {
+        "status": "success",
+        "message": "Evidence uploaded and registered successfully",
+        "evidence": {
+            "case_id": case_id,
+            "filename": safe_filename,
+            "file_path": str(relative_path),
+            "sha256": file_sha256,
+            "size_bytes": size_bytes,
+            "artifact_type": artifact_type,
+            "source": "evidence_upload",
+            "created_at": created_at
+        }
+    }
+
+
 @app.get("/api/cases/{case_id}/evidence")
 def list_case_evidence(case_id: str):
 
@@ -211,27 +328,19 @@ def add_finding(finding: FindingCreate):
             detail="Case not found"
         )
 
-    existing_findings = get_case_findings(finding.case_id)
-
-    for existing_finding in existing_findings:
-        if existing_finding["finding_id"] == finding.finding_id:
-            raise HTTPException(
-                status_code=409,
-                detail="Finding ID already exists"
-            )
-
-    reasons_json = json.dumps(finding.reasons)
+    created_at = datetime.now().isoformat()
 
     create_finding(
         finding_id=finding.finding_id,
         case_id=finding.case_id,
         artifact=finding.artifact,
-        finding_type=finding.type,
+        type=finding.type,
         severity=finding.severity,
         score=finding.score,
         timestamp=finding.timestamp,
-        reasons=reasons_json,
-        source=finding.source
+        reasons=json.dumps(finding.reasons),
+        source=finding.source,
+        created_at=created_at
     )
 
     return {
@@ -246,7 +355,8 @@ def add_finding(finding: FindingCreate):
             "score": finding.score,
             "timestamp": finding.timestamp,
             "reasons": finding.reasons,
-            "source": finding.source
+            "source": finding.source,
+            "created_at": created_at
         }
     }
 
@@ -265,9 +375,16 @@ def list_case_findings(case_id: str):
     findings = get_case_findings(case_id)
 
     for finding in findings:
+
         try:
-            finding["reasons"] = json.loads(finding["reasons"])
-        except (json.JSONDecodeError, TypeError):
+            finding["reasons"] = json.loads(
+                finding["reasons"]
+            )
+
+        except (
+            json.JSONDecodeError,
+            TypeError
+        ):
             finding["reasons"] = []
 
     return {
@@ -279,34 +396,99 @@ def list_case_findings(case_id: str):
 
 
 # =========================================================
-# AI EXPLANATION API
+# TIMELINE APIs
+# =========================================================
+
+@app.post("/api/timeline")
+def add_timeline_event(event: TimelineEventCreate):
+
+    case = get_case(event.case_id)
+
+    if case is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Case not found"
+        )
+
+    metadata_json = json.dumps(event.metadata)
+
+    create_timeline_event(
+        case_id=event.case_id,
+        timestamp=event.timestamp,
+        event_type=event.event_type,
+        source=event.source,
+        description=event.description,
+        metadata=metadata_json
+    )
+
+    return {
+        "status": "success",
+        "message": "Timeline event stored successfully",
+        "event": {
+            "case_id": event.case_id,
+            "timestamp": event.timestamp,
+            "event_type": event.event_type,
+            "source": event.source,
+            "description": event.description,
+            "metadata": event.metadata
+        }
+    }
+
+
+@app.get("/api/cases/{case_id}/timeline")
+def list_case_timeline(case_id: str):
+
+    case = get_case(case_id)
+
+    if case is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Case not found"
+        )
+
+    events = get_case_timeline(case_id)
+
+    for event in events:
+
+        try:
+            event["metadata"] = json.loads(
+                event["metadata"]
+            )
+
+        except (
+            json.JSONDecodeError,
+            TypeError
+        ):
+            event["metadata"] = {}
+
+    return {
+        "status": "success",
+        "case_id": case_id,
+        "count": len(events),
+        "events": events
+    }
+
+
+# =========================================================
+# AI APIs
 # =========================================================
 
 @app.post("/api/ai/explain")
 def explain_finding_api(finding: FindingCreate):
 
-    finding_data = {
-        "finding_id": finding.finding_id,
-        "artifact": finding.artifact,
-        "type": finding.type,
-        "severity": finding.severity,
-        "score": finding.score,
-        "timestamp": finding.timestamp,
-        "reasons": finding.reasons,
-        "source": finding.source
-    }
-
     try:
-        explanation = explain_finding(finding_data)
+        return explain_finding(finding.model_dump())
 
-        return {
-            "status": "success",
-            "finding_id": finding.finding_id,
-            "explanation": explanation
-        }
+    except Exception as exc:
 
-    except RuntimeError as error:
         raise HTTPException(
             status_code=502,
-            detail=str(error)
+            detail=str(exc)
         )
+
+
+# =========================================================
+# STARTUP
+# =========================================================
+
+initialize_database()

@@ -1,44 +1,75 @@
-import { useEffect, useState } from "react";
-import { getCases, getCaseEvidence } from "../services/api";
+import { useEffect, useRef, useState } from "react";
+import {
+  getCases,
+  getCaseEvidence,
+  uploadEvidence,
+} from "../services/api";
 
 function Evidence() {
   const [caseData, setCaseData] = useState(null);
   const [evidence, setEvidence] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [uploadMessage, setUploadMessage] = useState("");
+
+  const fileInputRef = useRef(null);
+
+  async function fetchEvidence() {
+    const casesResponse = await getCases();
+    const cases = casesResponse.cases || [];
+
+    if (cases.length === 0) {
+      return {
+        caseData: null,
+        evidence: [],
+      };
+    }
+
+    const currentCase = cases[0];
+
+    const evidenceResponse = await getCaseEvidence(
+      currentCase.case_id
+    );
+
+    return {
+      caseData: currentCase,
+      evidence: evidenceResponse.evidence || [],
+    };
+  }
 
   useEffect(() => {
-    async function loadEvidence() {
+    let cancelled = false;
+
+    async function initialLoad() {
       try {
-        setLoading(true);
-        setError("");
+        const result = await fetchEvidence();
 
-        const casesResponse = await getCases();
-        const cases = casesResponse.cases || [];
-
-        if (cases.length === 0) {
-          setCaseData(null);
-          setEvidence([]);
+        if (cancelled) {
           return;
         }
 
-        const currentCase = cases[0];
-        setCaseData(currentCase);
-
-        const evidenceResponse = await getCaseEvidence(
-          currentCase.case_id
-        );
-
-        setEvidence(evidenceResponse.evidence || []);
+        setCaseData(result.caseData);
+        setEvidence(result.evidence);
       } catch (err) {
+        if (cancelled) {
+          return;
+        }
+
         console.error("Evidence API error:", err);
         setError(err.message || "Failed to load evidence.");
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
 
-    loadEvidence();
+    initialLoad();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function formatSize(bytes) {
@@ -61,26 +92,6 @@ function Evidence() {
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   }
 
-  function formatDate(timestamp) {
-    if (!timestamp) {
-      return "--";
-    }
-
-    const date = new Date(timestamp);
-
-    if (Number.isNaN(date.getTime())) {
-      return timestamp;
-    }
-
-    return date.toLocaleString([], {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  }
-
   function shortenHash(hash) {
     if (!hash) {
       return "--";
@@ -91,6 +102,51 @@ function Evidence() {
     }
 
     return `${hash.slice(0, 8)}...${hash.slice(-8)}`;
+  }
+
+  function handleUploadButtonClick() {
+    if (uploading) {
+      return;
+    }
+
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(event) {
+    const file = event.target.files?.[0];
+
+    if (!file || !caseData) {
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setError("");
+      setUploadMessage("");
+
+      const response = await uploadEvidence(
+        caseData.case_id,
+        file
+      );
+
+      setUploadMessage(
+        `${response.evidence.filename} uploaded successfully.`
+      );
+
+      const refreshed = await fetchEvidence();
+
+      setCaseData(refreshed.caseData);
+      setEvidence(refreshed.evidence);
+    } catch (err) {
+      console.error("Evidence upload error:", err);
+      setError(err.message || "Failed to upload evidence.");
+    } finally {
+      setUploading(false);
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
   }
 
   if (loading) {
@@ -106,7 +162,7 @@ function Evidence() {
     );
   }
 
-  if (error) {
+  if (error && !caseData) {
     return (
       <div className="dashboard">
         <div className="dashboard-header">
@@ -135,7 +191,8 @@ function Evidence() {
 
         <div className="section-card">
           <p>
-            Create a case in the backend before adding or viewing evidence.
+            Create a case in the backend before adding or viewing
+            evidence.
           </p>
         </div>
       </div>
@@ -144,7 +201,6 @@ function Evidence() {
 
   return (
     <div className="dashboard">
-
       {/* HEADER */}
       <div className="dashboard-header">
         <div>
@@ -162,7 +218,6 @@ function Evidence() {
 
       {/* TOP SUMMARY */}
       <div className="stats-grid">
-
         <div className="stat-card">
           <h3>Total Evidence</h3>
           <div className="stat-value">{evidence.length}</div>
@@ -186,23 +241,47 @@ function Evidence() {
           <div className="stat-value">--</div>
           <small>Verification API pending</small>
         </div>
-
       </div>
 
       {/* EVIDENCE SECTION */}
       <div className="section-card">
-
         <div className="section-header">
           <h2>Collected Evidence</h2>
 
-          <button className="upload-button">
-            + Upload Evidence
+          <button
+            className="upload-button"
+            onClick={handleUploadButtonClick}
+            disabled={uploading}
+          >
+            {uploading
+              ? "Uploading..."
+              : "+ Upload Evidence"}
           </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileChange}
+            style={{ display: "none" }}
+          />
         </div>
+
+        {uploadMessage && (
+          <div className="investigation-note">
+            <strong>Upload successful:</strong>{" "}
+            {uploadMessage}
+          </div>
+        )}
+
+        {error && (
+          <div className="investigation-note">
+            <strong>Upload error:</strong>{" "}
+            {error}
+          </div>
+        )}
 
         {/* TABLE */}
         <div className="evidence-table">
-
           <div className="evidence-row evidence-header">
             <span>Evidence</span>
             <span>Type</span>
@@ -224,10 +303,9 @@ function Evidence() {
                 className="evidence-row"
                 key={`${item.filename}-${index}`}
               >
-
                 <div className="evidence-name">
                   <div className="file-icon">
-                    ◈
+                    FILE
                   </div>
 
                   <div>
@@ -257,26 +335,22 @@ function Evidence() {
                 <span className="muted">
                   NOT AVAILABLE
                 </span>
-
               </div>
             ))
           )}
-
         </div>
-
       </div>
 
       {/* INTEGRITY INFORMATION */}
       <div className="investigation-note">
         <strong>Evidence Integrity:</strong>{" "}
-        SHA-256 hashes are provided by the backend for collected
-        evidence. Integrity verification status will be connected
-        when the verification data source is available.
+        SHA-256 hashes are calculated from uploaded evidence files
+        and recorded by the backend. Integrity verification status
+        will be connected when the verification data source is
+        available.
       </div>
-
     </div>
   );
 }
 
 export default Evidence;
-

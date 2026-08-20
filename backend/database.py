@@ -70,6 +70,22 @@ def initialize_database():
         )
     """)
 
+    # -------------------------
+    # TIMELINE EVENTS TABLE
+    # -------------------------
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS timeline_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            case_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            source TEXT NOT NULL,
+            description TEXT NOT NULL,
+            metadata TEXT NOT NULL DEFAULT '{}',
+            FOREIGN KEY (case_id) REFERENCES cases(case_id)
+        )
+    """)
+
     connection.commit()
     connection.close()
 
@@ -297,3 +313,81 @@ def get_case_findings(case_id: str):
     connection.close()
 
     return [dict(finding) for finding in findings]
+
+
+# =========================================================
+# TIMELINE FUNCTIONS
+# =========================================================
+
+def create_timeline_event(
+    case_id: str,
+    timestamp: str,
+    event_type: str,
+    source: str,
+    description: str,
+    metadata: str
+):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO timeline_events (
+            case_id,
+            timestamp,
+            event_type,
+            source,
+            description,
+            metadata
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        case_id,
+        timestamp,
+        event_type,
+        source,
+        description,
+        metadata
+    ))
+
+    connection.commit()
+    connection.close()
+
+
+def get_case_timeline(case_id: str):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            id,
+            case_id,
+            timestamp,
+            event_type,
+            source,
+            description,
+            metadata
+        FROM timeline_events
+        WHERE case_id = ?
+        ORDER BY timestamp ASC, id ASC
+    """, (case_id,))
+
+    events = cursor.fetchall()
+    connection.close()
+
+    return [dict(event) for event in events]
+
+def delete_evidence(evidence_id: int):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        DELETE FROM evidence
+        WHERE id = ?
+    """, (evidence_id,))
+
+    deleted = cursor.rowcount
+
+    connection.commit()
+    connection.close()
+
+    return deleted

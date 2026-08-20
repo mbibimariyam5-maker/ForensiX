@@ -1,101 +1,190 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { getCases, getCaseTimeline } from "../services/api";
 
 function TimelinePage() {
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [timelineEvents, setTimelineEvents] = useState([]);
+  const [caseId, setCaseId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const timelineEvents = [
-    {
-      id: "T-001",
-      time: "10:24:12",
-      date: "18 Aug 2026",
-      event: "Multiple failed login attempts",
-      type: "AUTHENTICATION",
-      user: "unknown",
-      ip: "192.168.1.45",
-      finding: "F-001",
-      severity: "HIGH",
-      description:
-        "Multiple unsuccessful authentication attempts were detected within a short period.",
-    },
-    {
-      id: "T-002",
-      time: "10:18:43",
-      date: "18 Aug 2026",
-      event: "IOC match detected",
-      type: "FILE ANALYSIS",
-      user: "system",
-      ip: "192.168.1.20",
-      finding: "F-002",
-      severity: "CRITICAL",
-      description:
-        "An analyzed executable matched a configured indicator of compromise.",
-    },
-    {
-      id: "T-003",
-      time: "09:52:31",
-      date: "18 Aug 2026",
-      event: "Suspicious system event",
-      type: "SYSTEM EVENT",
-      user: "administrator",
-      ip: "192.168.1.12",
-      finding: "F-003",
-      severity: "MEDIUM",
-      description:
-        "An unusual system event was recorded and flagged for investigator review.",
-    },
-    {
-      id: "T-004",
-      time: "09:41:18",
-      date: "18 Aug 2026",
-      event: "Unusual process detected",
-      type: "PROCESS",
-      user: "user01",
-      ip: "192.168.1.30",
-      finding: "F-004",
-      severity: "HIGH",
-      description:
-        "A process with unusual execution characteristics was identified.",
-    },
-    {
-      id: "T-005",
-      time: "09:30:05",
-      date: "18 Aug 2026",
-      event: "Browser artifact accessed",
-      type: "BROWSER",
-      user: "user01",
-      ip: "192.168.1.30",
-      finding: "F-005",
-      severity: "LOW",
-      description:
-        "An uncommon access pattern was observed in the browser history artifact.",
-    },
-    {
-      id: "T-006",
-      time: "09:15:42",
-      date: "18 Aug 2026",
-      event: "Evidence acquisition completed",
-      type: "EVIDENCE",
-      user: "forensic-agent",
-      ip: "192.168.1.10",
-      finding: "NONE",
-      severity: "LOW",
-      description:
-        "Evidence acquisition was completed and the collected data was prepared for analysis.",
-    },
-    {
-      id: "T-007",
-      time: "09:05:17",
-      date: "18 Aug 2026",
-      event: "Memory image acquired",
-      type: "EVIDENCE",
-      user: "forensic-agent",
-      ip: "192.168.1.10",
-      finding: "NONE",
-      severity: "LOW",
-      description:
-        "A memory image was successfully acquired as part of the forensic collection process.",
-    },
-  ];
+  useEffect(() => {
+    async function loadTimeline() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const casesResponse = await getCases();
+
+        if (
+          !casesResponse.cases ||
+          casesResponse.cases.length === 0
+        ) {
+          setCaseId("");
+          setTimelineEvents([]);
+          return;
+        }
+
+        const currentCase = casesResponse.cases[0];
+        const currentCaseId = currentCase.case_id;
+
+        setCaseId(currentCaseId);
+
+        const timelineResponse = await getCaseTimeline(currentCaseId);
+
+        setTimelineEvents(timelineResponse.events || []);
+      } catch (err) {
+        console.error("Failed to load timeline:", err);
+        setError("Unable to load investigation timeline.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadTimeline();
+  }, []);
+
+  const formatDate = (timestamp) => {
+    if (!timestamp) {
+      return "Unknown date";
+    }
+
+    const date = new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) {
+      return timestamp;
+    }
+
+    return date.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) {
+      return "--:--:--";
+    }
+
+    const date = new Date(timestamp);
+
+    if (Number.isNaN(date.getTime())) {
+      return timestamp;
+    }
+
+    return date.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  };
+
+  const getEventSeverity = (event) => {
+    const metadata = event.metadata || {};
+
+    if (metadata.severity) {
+      return String(metadata.severity).toUpperCase();
+    }
+
+    return "LOW";
+  };
+
+  const getEventUser = (event) => {
+    const metadata = event.metadata || {};
+
+    return (
+      metadata.user ||
+      metadata.username ||
+      metadata.account ||
+      "unknown"
+    );
+  };
+
+  const getEventIp = (event) => {
+    const metadata = event.metadata || {};
+
+    return (
+      metadata.ip ||
+      metadata.ip_address ||
+      "N/A"
+    );
+  };
+
+  const getFinding = (event) => {
+    const metadata = event.metadata || {};
+
+    return metadata.finding_id || "NONE";
+  };
+
+  const getDisplayType = (event) => {
+    if (!event.event_type) {
+      return "OTHER";
+    }
+
+    return event.event_type
+      .replace(/_/g, " ")
+      .toUpperCase();
+  };
+
+  const totalEvents = timelineEvents.length;
+
+  const findingsLinked = timelineEvents.filter(
+    (event) => getFinding(event) !== "NONE"
+  ).length;
+
+  const highPriorityEvents = timelineEvents.filter((event) => {
+    const severity = getEventSeverity(event);
+
+    return (
+      severity === "HIGH" ||
+      severity === "CRITICAL"
+    );
+  }).length;
+
+  const getTimeRange = () => {
+    if (timelineEvents.length < 2) {
+      return "0h";
+    }
+
+    const timestamps = timelineEvents
+      .map((event) => new Date(event.timestamp).getTime())
+      .filter((time) => !Number.isNaN(time));
+
+    if (timestamps.length < 2) {
+      return "0h";
+    }
+
+    const earliest = Math.min(...timestamps);
+    const latest = Math.max(...timestamps);
+
+    const differenceInHours =
+      (latest - earliest) / (1000 * 60 * 60);
+
+    if (differenceInHours < 1) {
+      const minutes = Math.max(
+        1,
+        Math.round(differenceInHours * 60)
+      );
+
+      return `${minutes}m`;
+    }
+
+    return `${Math.round(differenceInHours * 10) / 10}h`;
+  };
+
+  const mappedEvents = timelineEvents.map((event) => ({
+    ...event,
+    displayId: `T-${String(event.id).padStart(3, "0")}`,
+    time: formatTime(event.timestamp),
+    date: formatDate(event.timestamp),
+    event: event.description,
+    type: getDisplayType(event),
+    user: getEventUser(event),
+    ip: getEventIp(event),
+    finding: getFinding(event),
+    severity: getEventSeverity(event),
+  }));
 
   return (
     <div className="dashboard">
@@ -113,7 +202,9 @@ function TimelinePage() {
 
         <div className="case-info">
           <span>CASE</span>
-          <strong>CASE-2026-001</strong>
+          <strong>
+            {caseId || "NO CASE"}
+          </strong>
         </div>
 
       </div>
@@ -124,25 +215,35 @@ function TimelinePage() {
 
         <div className="stat-card">
           <h3>Total Events</h3>
-          <div className="stat-value">186</div>
+          <div className="stat-value">
+            {loading ? "--" : totalEvents}
+          </div>
           <small>Recorded events</small>
         </div>
 
         <div className="stat-card">
           <h3>Findings Linked</h3>
-          <div className="stat-value">17</div>
+          <div className="stat-value">
+            {loading ? "--" : findingsLinked}
+          </div>
           <small>Events linked to findings</small>
         </div>
 
         <div className="stat-card">
           <h3>High Priority</h3>
-          <div className="stat-value">07</div>
+          <div className="stat-value">
+            {loading
+              ? "--"
+              : String(highPriorityEvents).padStart(2, "0")}
+          </div>
           <small>Events requiring review</small>
         </div>
 
         <div className="stat-card">
           <h3>Time Range</h3>
-          <div className="stat-value">2h</div>
+          <div className="stat-value">
+            {loading ? "--" : getTimeRange()}
+          </div>
           <small>Investigation window</small>
         </div>
 
@@ -169,110 +270,142 @@ function TimelinePage() {
         </div>
 
 
+        {/* ERROR */}
+        {error && (
+          <div className="investigation-note">
+            <strong>Timeline Error:</strong>{" "}
+            {error}
+          </div>
+        )}
+
+
+        {/* LOADING */}
+        {loading && !error && (
+          <div className="investigation-note">
+            Loading investigation timeline...
+          </div>
+        )}
+
+
+        {/* EMPTY STATE */}
+        {!loading &&
+          !error &&
+          mappedEvents.length === 0 && (
+            <div className="investigation-note">
+              <strong>No timeline events found.</strong>{" "}
+              Timeline events will appear here when forensic
+              activity is recorded for this case.
+            </div>
+          )}
+
+
         {/* TIMELINE */}
-        <div className="forensic-timeline">
+        {!loading &&
+          mappedEvents.length > 0 && (
+            <div className="forensic-timeline">
 
-          {timelineEvents.map((event) => (
-
-            <div
-              className="timeline-event"
-              key={event.id}
-              onClick={() => setSelectedEvent(event)}
-            >
-
-              {/* TIME */}
-              <div className="timeline-time">
-
-                <strong>
-                  {event.time}
-                </strong>
-
-                <span>
-                  {event.date}
-                </span>
-
-              </div>
-
-
-              {/* LINE + DOT */}
-              <div className="timeline-marker">
+              {mappedEvents.map((event) => (
 
                 <div
-                  className={`timeline-dot ${event.severity.toLowerCase()}`}
-                ></div>
+                  className="timeline-event"
+                  key={event.id}
+                  onClick={() => setSelectedEvent(event)}
+                >
 
-              </div>
+                  {/* TIME */}
+                  <div className="timeline-time">
 
+                    <strong>
+                      {event.time}
+                    </strong>
 
-              {/* EVENT CARD */}
-              <div className="timeline-event-card">
-
-                <div className="timeline-event-top">
-
-                  <div>
-
-                    <span
-                      className={`timeline-severity ${event.severity.toLowerCase()}`}
-                    >
-                      {event.severity}
+                    <span>
+                      {event.date}
                     </span>
 
-                    <h3>
-                      {event.event}
-                    </h3>
+                  </div>
+
+
+                  {/* LINE + DOT */}
+                  <div className="timeline-marker">
+
+                    <div
+                      className={`timeline-dot ${event.severity.toLowerCase()}`}
+                    ></div>
 
                   </div>
 
-                  <span className="timeline-event-id">
-                    {event.id}
-                  </span>
+
+                  {/* EVENT CARD */}
+                  <div className="timeline-event-card">
+
+                    <div className="timeline-event-top">
+
+                      <div>
+
+                        <span
+                          className={`timeline-severity ${event.severity.toLowerCase()}`}
+                        >
+                          {event.severity}
+                        </span>
+
+                        <h3>
+                          {event.event}
+                        </h3>
+
+                      </div>
+
+                      <span className="timeline-event-id">
+                        {event.displayId}
+                      </span>
+
+                    </div>
+
+
+                    <div className="timeline-event-details">
+
+                      <div>
+                        <span>TYPE</span>
+                        <strong>
+                          {event.type}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>USER</span>
+                        <strong>
+                          {event.user}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>IP ADDRESS</span>
+                        <strong>
+                          {event.ip}
+                        </strong>
+                      </div>
+
+                      <div>
+                        <span>FINDING</span>
+                        <strong>
+                          {event.finding}
+                        </strong>
+                      </div>
+
+                    </div>
+
+                    <div className="timeline-click-hint">
+                      Click event to view details →
+                    </div>
+
+                  </div>
 
                 </div>
 
-
-                <div className="timeline-event-details">
-
-                  <div>
-                    <span>TYPE</span>
-                    <strong>
-                      {event.type}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>USER</span>
-                    <strong>
-                      {event.user}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>IP ADDRESS</span>
-                    <strong>
-                      {event.ip}
-                    </strong>
-                  </div>
-
-                  <div>
-                    <span>FINDING</span>
-                    <strong>
-                      {event.finding}
-                    </strong>
-                  </div>
-
-                </div>
-
-                <div className="timeline-click-hint">
-                  Click event to view details →
-                </div>
-
-              </div>
+              ))}
 
             </div>
-
-          ))}
-
-        </div>
+          )}
 
       </div>
 
@@ -309,7 +442,7 @@ function TimelinePage() {
                 </h2>
 
                 <span className="panel-id">
-                  {selectedEvent.id}
+                  {selectedEvent.displayId}
                 </span>
 
               </div>
@@ -393,7 +526,7 @@ function TimelinePage() {
                   <span>EVENT ID</span>
 
                   <strong>
-                    {selectedEvent.id}
+                    {selectedEvent.displayId}
                   </strong>
                 </div>
 
