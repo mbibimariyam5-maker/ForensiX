@@ -1,5 +1,19 @@
 const API_BASE_URL = '/api';
 
+const SELECTED_CASE_KEY = 'forensix_selected_case';
+
+export function setSelectedCase(caseId) {
+  if (caseId) {
+    localStorage.setItem(SELECTED_CASE_KEY, caseId);
+  } else {
+    localStorage.removeItem(SELECTED_CASE_KEY);
+  }
+}
+
+export function getSelectedCaseId() {
+  return localStorage.getItem(SELECTED_CASE_KEY);
+}
+
 // Create a new case
 export async function createCase(caseData) {
   const response = await fetch(`${API_BASE_URL}/cases`, {
@@ -32,15 +46,41 @@ export async function createCase(caseData) {
   return response.json();
 }
 
-// Get all cases
-export async function getCases() {
+// Get cases. By default, return the currently selected case for investigation pages.
+// Pass true when the full case list is needed, such as on the Cases page.
+export async function getCases(allCases = false) {
   const response = await fetch(`${API_BASE_URL}/cases`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch cases: ${response.status}`);
   }
 
-  return response.json();
+  const data = await response.json();
+
+  if (allCases) {
+    return data;
+  }
+
+  const cases = data.cases || [];
+  const selectedCaseId = getSelectedCaseId();
+
+  if (!selectedCaseId) {
+    return data;
+  }
+
+  const selectedCase = cases.find(
+    (item) => item.case_id === selectedCaseId
+  );
+
+  if (!selectedCase) {
+    return data;
+  }
+
+  return {
+    ...data,
+    cases: [selectedCase],
+    count: 1,
+  };
 }
 
 // Get one case by case ID
