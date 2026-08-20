@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import Dashboard from "./pages/Dashboard";
+import Cases from "./pages/Cases";
 import Evidence from "./pages/Evidence";
 import Findings from "./pages/Findings";
 import TimelinePage from "./pages/TimelinePage";
@@ -16,6 +17,8 @@ function App() {
 
   const renderPage = () => {
     switch (activePage) {
+      case "cases":
+        return <Cases />;
 
       case "evidence":
         return <Evidence />;
@@ -40,7 +43,6 @@ function App() {
 
   return (
     <div className="app-layout">
-
       <Sidebar
         activePage={activePage}
         setActivePage={setActivePage}
@@ -49,7 +51,6 @@ function App() {
       <main className="main-content">
         {renderPage()}
       </main>
-
     </div>
   );
 }
