@@ -240,6 +240,7 @@ def get_case_evidence(case_id: str):
 
     return [dict(item) for item in evidence]
 
+
 def get_evidence(evidence_id: int):
     connection = get_connection()
     cursor = connection.cursor()
@@ -266,6 +267,8 @@ def get_evidence(evidence_id: int):
         return None
 
     return dict(evidence)
+
+
 # =========================================================
 # FINDINGS FUNCTIONS
 # =========================================================
@@ -279,8 +282,17 @@ def create_finding(
     score: int,
     timestamp: str,
     reasons: str,
-    source: str
+    source: str,
+    created_at: str | None = None,
+    **kwargs
 ):
+    """Insert a finding.
+
+    ``created_at`` is accepted for compatibility with the API layer, but the
+    current findings table does not store a created_at column. ``kwargs`` is
+    intentionally accepted so the API/database boundary remains tolerant of
+    non-persistent metadata without changing the current schema.
+    """
     connection = get_connection()
     cursor = connection.cursor()
 
@@ -394,12 +406,13 @@ def get_case_timeline(case_id: str):
         FROM timeline_events
         WHERE case_id = ?
         ORDER BY timestamp ASC, id ASC
-    """, (case_id,))
+    """)
 
     events = cursor.fetchall()
     connection.close()
 
     return [dict(event) for event in events]
+
 
 def delete_evidence(evidence_id: int):
     connection = get_connection()
