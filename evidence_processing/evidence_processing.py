@@ -56,16 +56,19 @@ def _create_timeline_from_file(path, case_id, sha256, artifact_type, file_stats)
         "sha256": sha256,
         "artifact_type": artifact_type,
         "file_path": str(path),
-        "timestamp_source": "filesystem_metadata",
+        "timestamp_source": "evidence_storage_and_filesystem",
     }
 
+    # The evidence file is created in the ForensiX evidence-storage location
+    # when the upload is accepted. Using the current ingestion time makes the
+    # creation event deterministic even when filesystem ctime semantics vary.
     analyzer.add_event(
         TimelineEvent(
-            timestamp=datetime.fromtimestamp(file_stats.st_ctime),
+            timestamp=datetime.now(),
             event_type=EventType.FILE_CREATION,
             source="evidence_processing",
-            description=f"Evidence file created: {path.name}",
-            metadata={**metadata, "timestamp_field": "created"},
+            description=f"Evidence file created in evidence storage: {path.name}",
+            metadata={**metadata, "timestamp_field": "evidence_created"},
         )
     )
 
