@@ -1,7 +1,10 @@
 import hashlib
 import json
-import mimetypes
+from datetime import datetime
 from pathlib import Path
+
+from backend.database import create_timeline_event
+from forensic.timeline import EventType, TimelineAnalyzer, TimelineEvent
 
 
 def calculate_sha256(file_path):
@@ -43,6 +46,50 @@ def get_artifact_type(file_path):
     return artifact_types.get(extension, "UNKNOWN")
 
 
+def _create_timeline_from_file(path, case_id, sha256, artifact_type, file_stats):
+    """Create supported filesystem timeline events for an evidence file."""
+    analyzer = TimelineAnalyzer()
+
+    metadata = {
+        "case_id": case_id,
+        "filename": path.name,
+        "sha256": sha256,
+        "artifact_type": artifact_type,
+        "file_path": str(path),
+        "timestamp_source": "filesystem_metadata",
+    }
+
+    analyzer.add_event(
+        TimelineEvent(
+            timestamp=datetime.fromtimestamp(file_stats.st_ctime),
+            event_type=EventType.FILE_CREATION,
+            source="evidence_processing",
+            description=f"Evidence file created: {path.name}",
+            metadata={**metadata, "timestamp_field": "created"},
+        )
+    )
+
+    analyzer.add_event(
+        TimelineEvent(
+            timestamp=datetime.fromtimestamp(file_stats.st_mtime),
+            event_type=EventType.FILE_MODIFICATION,
+            source="evidence_processing",
+            description=f"Evidence file modified: {path.name}",
+            metadata={**metadata, "timestamp_field": "modified"},
+        )
+    )
+
+    for event in analyzer.get_sorted_events():
+        create_timeline_event(
+            case_id=case_id,
+            timestamp=event.timestamp.isoformat(),
+            event_type=event.event_type.value,
+            source=event.source,
+            description=event.description,
+            metadata=json.dumps(event.metadata),
+        )
+
+
 def process_evidence(file_path, case_id):
     """Process an evidence artifact and create the backend JSON payload."""
 
@@ -51,9 +98,18 @@ def process_evidence(file_path, case_id):
     if not path.is_file():
         raise FileNotFoundError(f"Evidence file not found: {file_path}")
 
+    file_stats = path.stat()
     sha256 = calculate_sha256(path)
-    size_bytes = path.stat().st_size
+    size_bytes = file_stats.st_size
     artifact_type = get_artifact_type(path)
+
+    _create_timeline_from_file(
+        path,
+        case_id,
+        sha256,
+        artifact_type,
+        file_stats,
+    )
 
     evidence = {
         "case_id": case_id,
@@ -70,10 +126,7 @@ def process_evidence(file_path, case_id):
 
 if __name__ == "__main__":
 
-    # Change this to your actual evidence file
     evidence_file = "test_evidence.txt"
-
-    # Case ID provided by the investigation
     case_id = "CASE-001"
 
     try:
