@@ -58,6 +58,34 @@ export async function uploadEvidence(caseId, file) {
   return response.json();
 }
 
+// Verify evidence integrity
+export async function verifyEvidence(evidenceId) {
+  const response = await fetch(
+    `${API_BASE_URL}/evidence/${evidenceId}/verify`,
+    {
+      method: 'POST',
+    }
+  );
+
+  if (!response.ok) {
+    let message = `Failed to verify evidence: ${response.status}`;
+
+    try {
+      const errorData = await response.json();
+
+      if (errorData.detail) {
+        message = errorData.detail;
+      }
+    } catch {
+      // Keep the default error message.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 // Get findings for a specific case
 export async function getCaseFindings(caseId) {
   const response = await fetch(
@@ -111,4 +139,40 @@ export async function getAIExplanation(finding) {
   }
 
   return response.json();
+}
+export async function exportCaseReportPDF(caseId) {
+  const response = await fetch(
+    `${API_BASE_URL}/cases/${caseId}/report/pdf`
+  );
+
+  if (!response.ok) {
+    let message = `Failed to export PDF: ${response.status}`;
+
+    try {
+      const errorData = await response.json();
+
+      if (errorData.detail) {
+        message = errorData.detail;
+      }
+    } catch {
+      // Keep the default error message.
+    }
+
+    throw new Error(message);
+  }
+
+  const blob = await response.blob();
+
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `${caseId}-forensic-report.pdf`;
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+
+  URL.revokeObjectURL(url);
 }

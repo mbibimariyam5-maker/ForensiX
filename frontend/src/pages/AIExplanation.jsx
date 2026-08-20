@@ -77,9 +77,7 @@ function AIExplanation() {
 
         const response = await getAIExplanation(selected);
 
-        setAIExplanation(
-          response.explanation || null
-        );
+       setAIExplanation(response);
       } catch (err) {
         console.error("AI explanation API error:", err);
         setAIError(

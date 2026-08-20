@@ -4,6 +4,8 @@ import {
   getCaseEvidence,
   getCaseFindings,
   getCaseTimeline,
+  verifyEvidence,
+  exportCaseReportPDF,
 } from "../services/api";
 
 function Reports() {
@@ -15,6 +17,8 @@ function Reports() {
   const [evidence, setEvidence] = useState([]);
   const [findings, setFindings] = useState([]);
   const [timelineEvents, setTimelineEvents] = useState([]);
+  const [verificationResults, setVerificationResults] = useState([]);
+  const [exportingPDF, setExportingPDF] = useState(false);
 
   useEffect(() => {
     async function loadReportData() {
@@ -23,7 +27,6 @@ function Reports() {
         setError("");
 
         const casesResponse = await getCases();
-
         const cases = casesResponse.cases || [];
 
         if (cases.length === 0) {
@@ -46,14 +49,44 @@ function Reports() {
           getCaseTimeline(currentCase.case_id),
         ]);
 
-        setEvidence(evidenceResponse.evidence || []);
+        const evidenceItems = evidenceResponse.evidence || [];
+
+        setEvidence(evidenceItems);
         setFindings(findingsResponse.findings || []);
         setTimelineEvents(timelineResponse.events || []);
 
+        const verificationResponses = await Promise.all(
+          evidenceItems.map(async (item) => {
+            try {
+              const response = await verifyEvidence(item.id);
+
+              return response.verification;
+            } catch (err) {
+              console.error(
+                `Failed to verify evidence ${item.id}:`,
+                err
+              );
+
+              return {
+                evidence_id: item.id,
+                verified: false,
+                status: "ERROR",
+                message:
+                  "Verification could not be completed.",
+              };
+            }
+          })
+        );
+
+        setVerificationResults(verificationResponses);
         setLoading(false);
       } catch (err) {
         console.error("Failed to load report data:", err);
-        setError("Failed to load report data from the backend.");
+
+        setError(
+          "Failed to load report data from the backend."
+        );
+
         setLoading(false);
       }
     }
@@ -64,16 +97,28 @@ function Reports() {
   const totalEvidence = evidence.length;
   const totalFindings = findings.length;
 
-  /*
-   * The backend currently stores evidence SHA-256 values,
-   * but the original evidence files are not available for
-   * recalculation. Therefore we must not claim that the
-   * evidence has been cryptographically verified.
-   */
+  const verifiedEvidence = verificationResults.filter(
+    (result) => result?.verified === true
+  ).length;
+
+  const verificationIssues = verificationResults.filter(
+    (result) => result?.verified !== true
+  ).length;
+
+  const recordedHashes = evidence.filter(
+    (item) => item.sha256
+  ).length;
+
   const integrityStatus =
-    totalEvidence > 0
-      ? "VERIFICATION PENDING"
-      : "NO EVIDENCE";
+    totalEvidence === 0
+      ? "NO EVIDENCE"
+      : verificationResults.length < totalEvidence
+        ? "VERIFICATION PENDING"
+        : verifiedEvidence === totalEvidence
+          ? "VERIFIED"
+          : verifiedEvidence > 0
+            ? "PARTIAL"
+            : "FAILED";
 
   const criticalFindings = findings.filter(
     (finding) =>
@@ -134,10 +179,13 @@ function Reports() {
         low_findings: lowFindings,
         investigation_priority: investigationPriority,
         evidence_integrity: integrityStatus,
+        verified_evidence: verifiedEvidence,
+        verification_issues: verificationIssues,
         timeline_events: timelineEvents.length,
       },
 
       evidence,
+      verification_results: verificationResults,
       findings,
       timeline: timelineEvents,
 
@@ -168,10 +216,28 @@ function Reports() {
     setReportStatus("JSON report exported");
   };
 
-  const handlePDF = () => {
-    setReportStatus(
-      "PDF generation will be connected to the backend"
-    );
+  const handlePDF = async () => {
+    if (!caseData) {
+      setReportStatus("No case data available");
+      return;
+    }
+
+    try {
+      setExportingPDF(true);
+      setReportStatus("");
+
+      await exportCaseReportPDF(caseData.case_id);
+
+      setReportStatus("PDF report exported successfully");
+    } catch (err) {
+      console.error("Failed to export PDF:", err);
+
+      setReportStatus(
+        err.message || "Failed to export PDF report"
+      );
+    } finally {
+      setExportingPDF(false);
+    }
   };
 
   if (loading) {
@@ -227,7 +293,6 @@ function Reports() {
 
         </div>
 
-
         <div className="reports-case">
 
           <span>
@@ -282,7 +347,6 @@ function Reports() {
 
           </div>
 
-
           <div className="report-risk">
 
             <span>
@@ -304,7 +368,6 @@ function Reports() {
           </div>
 
         </div>
-
 
         <div className="report-meta">
 
@@ -359,7 +422,6 @@ function Reports() {
 
         </div>
 
-
         <div className="report-stat">
 
           <span>
@@ -376,7 +438,6 @@ function Reports() {
 
         </div>
 
-
         <div className="report-stat">
 
           <span>
@@ -392,7 +453,6 @@ function Reports() {
           </small>
 
         </div>
-
 
         <div className="report-stat">
 
@@ -417,7 +477,6 @@ function Reports() {
 
       <div className="report-content-grid">
 
-
         {/* FINDINGS SUMMARY */}
 
         <section className="report-section">
@@ -438,7 +497,6 @@ function Reports() {
 
           </div>
 
-
           <div className="finding-summary-row">
 
             <div>
@@ -454,7 +512,6 @@ function Reports() {
               </b>
             </div>
 
-
             <div>
               <span className="summary-dot high"></span>
 
@@ -468,7 +525,6 @@ function Reports() {
               </b>
             </div>
 
-
             <div>
               <span className="summary-dot medium"></span>
 
@@ -481,7 +537,6 @@ function Reports() {
                 {String(mediumFindings).padStart(2, "0")}
               </b>
             </div>
-
 
             <div>
               <span className="summary-dot low"></span>
@@ -521,23 +576,24 @@ function Reports() {
 
           </div>
 
-
           <div className="integrity-report">
 
             <div className="integrity-icon">
-              !
+              {integrityStatus === "VERIFIED" ? "✓" : "!"}
             </div>
 
             <div>
 
               <strong>
-                VERIFICATION PENDING
+                {integrityStatus}
               </strong>
 
               <p>
-                SHA-256 values are recorded for the evidence,
-                but the original evidence files are currently
-                unavailable for hash recalculation.
+                {totalEvidence === 0
+                  ? "No evidence is currently available for integrity verification."
+                  : integrityStatus === "VERIFIED"
+                    ? `All ${totalEvidence} evidence item(s) passed SHA-256 integrity verification.`
+                    : `${verifiedEvidence} of ${totalEvidence} evidence item(s) passed SHA-256 integrity verification. ${verificationIssues} item(s) require attention because their stored files could not be successfully verified.`}
               </p>
 
             </div>
@@ -545,27 +601,68 @@ function Reports() {
           </div>
 
 
+          {/* MAIN INTEGRITY SUMMARY */}
+
           <div className="integrity-details">
 
             <div>
               <span>COLLECTED</span>
-              <strong>{totalEvidence}</strong>
+              <strong>
+                {totalEvidence}
+              </strong>
             </div>
 
             <div>
               <span>HASH RECORDED</span>
-              <strong>{totalEvidence}</strong>
+              <strong>
+                {recordedHashes}
+              </strong>
             </div>
 
             <div>
               <span>VERIFIED</span>
-              <strong>00</strong>
+              <strong>
+                {String(verifiedEvidence).padStart(2, "0")}
+              </strong>
             </div>
 
           </div>
 
-        </section>
 
+          {/* VERIFICATION DETAILS */}
+
+          <div className="verification-report-list">
+
+            {verificationResults.map((result) => (
+
+              <div
+                className="verification-report-item"
+                key={result.evidence_id}
+              >
+
+                <div>
+
+                  <span>
+                    EVIDENCE #{result.evidence_id}
+                  </span>
+
+                  <strong>
+                    {result.status}
+                  </strong>
+
+                </div>
+
+                <p>
+                  {result.message}
+                </p>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </section>
 
       </div>
 
@@ -585,7 +682,6 @@ function Reports() {
           </h2>
 
         </div>
-
 
         <div className="scope-items">
 
@@ -615,8 +711,10 @@ function Reports() {
           </div>
 
           <div>
-            <span>!</span>
-            Integrity verification pending
+            <span>
+              {integrityStatus === "VERIFIED" ? "✓" : "!"}
+            </span>
+            Integrity verification: {integrityStatus}
           </div>
 
         </div>
@@ -645,7 +743,6 @@ function Reports() {
 
         </div>
 
-
         <div className="report-buttons">
 
           <button
@@ -655,7 +752,6 @@ function Reports() {
             Generate Report
           </button>
 
-
           <button
             className="report-secondary-button"
             onClick={handleJSON}
@@ -663,12 +759,14 @@ function Reports() {
             Export JSON
           </button>
 
-
           <button
             className="report-secondary-button"
             onClick={handlePDF}
+            disabled={exportingPDF}
           >
-            Export PDF
+            {exportingPDF
+              ? "Exporting PDF..."
+              : "Export PDF"}
           </button>
 
         </div>
@@ -688,8 +786,8 @@ function Reports() {
         Generated reports represent the current investigation
         state. AI-generated explanations are decision-support
         information and should be validated against the underlying
-        forensic evidence. SHA-256 integrity verification remains
-        pending until the original evidence files are available.
+        forensic evidence. SHA-256 integrity status is based on
+        live verification of the stored evidence files.
 
       </div>
 
