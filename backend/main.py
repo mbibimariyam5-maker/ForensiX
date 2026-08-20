@@ -1,7 +1,5 @@
 from datetime import datetime
-import hashlib
 import json
-import mimetypes
 from pathlib import Path
 from io import BytesIO
 
@@ -33,6 +31,8 @@ from backend.schemas import (
 )
 
 from backend.ai_adapter import explain_finding
+from evidence_processing.evidence_processing import process_evidence
+from forensic.hashing import HashAnalyzer
 
 
 app = FastAPI(
@@ -202,9 +202,6 @@ async def upload_evidence(
             / f"{destination.stem}_{timestamp}{destination.suffix}"
         )
 
-    sha256 = hashlib.sha256()
-    size_bytes = 0
-
     try:
         with destination.open("wb") as output_file:
 
@@ -215,8 +212,6 @@ async def upload_evidence(
                     break
 
                 output_file.write(chunk)
-                sha256.update(chunk)
-                size_bytes += len(chunk)
 
     except Exception as exc:
 
@@ -231,68 +226,62 @@ async def upload_evidence(
     finally:
         await file.close()
 
-    artifact_type = (
-        mimetypes.guess_type(safe_filename)[0]
-        or "application/octet-stream"
-    )
+    try:
+        processed_evidence = process_evidence(
+            destination,
+            case_id
+        )
 
-    extension = Path(safe_filename).suffix.lower()
+    except FileNotFoundError as exc:
 
-    artifact_type_map = {
-        ".exe": "EXECUTABLE",
-        ".dll": "EXECUTABLE",
-        ".bin": "BINARY",
-        ".log": "LOG",
-        ".txt": "TEXT",
-        ".csv": "CSV",
-        ".json": "JSON",
-        ".zip": "ARCHIVE",
-        ".rar": "ARCHIVE",
-        ".7z": "ARCHIVE",
-        ".pdf": "DOCUMENT",
-        ".doc": "DOCUMENT",
-        ".docx": "DOCUMENT",
-        ".xls": "DOCUMENT",
-        ".xlsx": "DOCUMENT",
-        ".jpg": "IMAGE",
-        ".jpeg": "IMAGE",
-        ".png": "IMAGE",
-    }
+        if destination.exists():
+            destination.unlink()
 
-    artifact_type = artifact_type_map.get(
-        extension,
-        artifact_type
-    )
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc)
+        )
 
-    file_sha256 = sha256.hexdigest()
+    except OSError as exc:
+
+        if destination.exists():
+            destination.unlink()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process evidence file: {exc}"
+        )
+
+    project_root = Path(__file__).resolve().parent.parent
+    relative_path = destination.relative_to(project_root)
+    processed_evidence["file_path"] = str(relative_path)
+    processed_evidence["filename"] = safe_filename
+    processed_evidence["source"] = "evidence_processing"
+
     created_at = datetime.now().isoformat()
 
-    relative_path = destination.relative_to(
-        Path(__file__).resolve().parent.parent
-    )
-
     create_evidence(
-        case_id=case_id,
-        filename=safe_filename,
-        file_path=str(relative_path),
-        sha256=file_sha256,
-        size_bytes=size_bytes,
-        artifact_type=artifact_type,
-        source="evidence_upload",
+        case_id=processed_evidence["case_id"],
+        filename=processed_evidence["filename"],
+        file_path=processed_evidence["file_path"],
+        sha256=processed_evidence["sha256"],
+        size_bytes=processed_evidence["size_bytes"],
+        artifact_type=processed_evidence["artifact_type"],
+        source=processed_evidence["source"],
         created_at=created_at
     )
 
     return {
         "status": "success",
-        "message": "Evidence uploaded and registered successfully",
+        "message": "Evidence uploaded, processed, and registered successfully",
         "evidence": {
-            "case_id": case_id,
-            "filename": safe_filename,
-            "file_path": str(relative_path),
-            "sha256": file_sha256,
-            "size_bytes": size_bytes,
-            "artifact_type": artifact_type,
-            "source": "evidence_upload",
+            "case_id": processed_evidence["case_id"],
+            "filename": processed_evidence["filename"],
+            "file_path": processed_evidence["file_path"],
+            "sha256": processed_evidence["sha256"],
+            "size_bytes": processed_evidence["size_bytes"],
+            "artifact_type": processed_evidence["artifact_type"],
+            "source": processed_evidence["source"],
             "created_at": created_at
         }
     }
@@ -348,18 +337,10 @@ def verify_evidence(evidence_id: int):
             }
         }
 
-    sha256 = hashlib.sha256()
+    hash_analyzer = HashAnalyzer("sha256")
 
     try:
-        with evidence_path.open("rb") as evidence_file:
-
-            while True:
-                chunk = evidence_file.read(1024 * 1024)
-
-                if not chunk:
-                    break
-
-                sha256.update(chunk)
+        calculated_sha256 = hash_analyzer.hash_file(evidence_path)
 
     except OSError as exc:
         raise HTTPException(
@@ -367,9 +348,7 @@ def verify_evidence(evidence_id: int):
             detail=f"Failed to read evidence file: {exc}"
         )
 
-    calculated_sha256 = sha256.hexdigest()
     recorded_sha256 = evidence["sha256"]
-
     verified = calculated_sha256.lower() == recorded_sha256.lower()
 
     verification_status = (
@@ -571,6 +550,7 @@ def explain_finding_api(finding: FindingCreate):
             status_code=502,
             detail=str(exc)
         )
+
 
 # =========================================================
 # REPORT APIs
@@ -809,6 +789,7 @@ def generate_case_report_pdf(case_id: str):
                 f'attachment; filename="{filename}"'
         }
     )
+
 
 # =========================================================
 # STARTUP
