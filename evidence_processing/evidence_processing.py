@@ -47,7 +47,7 @@ def get_artifact_type(file_path):
 
 
 def _create_timeline_from_file(path, case_id, sha256, artifact_type, file_stats):
-    """Create supported filesystem timeline events for an evidence file."""
+    """Create supported filesystem and chain-of-custody events for evidence."""
     analyzer = TimelineAnalyzer()
 
     metadata = {
@@ -58,6 +58,36 @@ def _create_timeline_from_file(path, case_id, sha256, artifact_type, file_stats)
         "file_path": str(path),
         "timestamp_source": "evidence_storage_and_filesystem",
     }
+
+    # Chain-of-custody: record the moment the evidence entered the case.
+    analyzer.add_event(
+        TimelineEvent(
+            timestamp=datetime.now(),
+            event_type=EventType.OTHER,
+            source="chain_of_custody",
+            description=f"Chain of custody: Evidence received and registered: {path.name}",
+            metadata={
+                **metadata,
+                "custody_action": "EVIDENCE_RECEIVED",
+                "custody_status": "REGISTERED",
+            },
+        )
+    )
+
+    # Chain-of-custody: record the original forensic hash captured at ingestion.
+    analyzer.add_event(
+        TimelineEvent(
+            timestamp=datetime.now(),
+            event_type=EventType.OTHER,
+            source="chain_of_custody",
+            description=f"Chain of custody: SHA-256 recorded for {path.name}",
+            metadata={
+                **metadata,
+                "custody_action": "HASH_RECORDED",
+                "custody_status": "INTEGRITY_BASELINE",
+            },
+        )
+    )
 
     # The evidence file is created in the ForensiX evidence-storage location
     # when the upload is accepted. Using the current ingestion time makes the
