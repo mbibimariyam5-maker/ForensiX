@@ -240,7 +240,32 @@ def get_case_evidence(case_id: str):
 
     return [dict(item) for item in evidence]
 
+def get_evidence(evidence_id: int):
+    connection = get_connection()
+    cursor = connection.cursor()
 
+    cursor.execute("""
+        SELECT
+            id,
+            case_id,
+            filename,
+            file_path,
+            sha256,
+            size_bytes,
+            artifact_type,
+            source,
+            created_at
+        FROM evidence
+        WHERE id = ?
+    """, (evidence_id,))
+
+    evidence = cursor.fetchone()
+    connection.close()
+
+    if evidence is None:
+        return None
+
+    return dict(evidence)
 # =========================================================
 # FINDINGS FUNCTIONS
 # =========================================================

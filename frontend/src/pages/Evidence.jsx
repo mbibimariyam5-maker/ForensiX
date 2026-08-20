@@ -3,6 +3,7 @@ import {
   getCases,
   getCaseEvidence,
   uploadEvidence,
+  verifyEvidence,
 } from "../services/api";
 
 function Evidence() {
@@ -10,6 +11,8 @@ function Evidence() {
   const [evidence, setEvidence] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [verifyingId, setVerifyingId] = useState(null);
+  const [verificationResults, setVerificationResults] = useState({});
   const [error, setError] = useState("");
   const [uploadMessage, setUploadMessage] = useState("");
 
@@ -105,7 +108,7 @@ function Evidence() {
   }
 
   function handleUploadButtonClick() {
-    if (uploading) {
+    if (uploading || verifyingId !== null) {
       return;
     }
 
@@ -147,6 +150,53 @@ function Evidence() {
         fileInputRef.current.value = "";
       }
     }
+  }
+
+  async function handleVerifyEvidence(evidenceId) {
+    try {
+      setVerifyingId(evidenceId);
+      setError("");
+
+      const response = await verifyEvidence(evidenceId);
+
+      setVerificationResults((previous) => ({
+        ...previous,
+        [evidenceId]: response.verification,
+      }));
+    } catch (err) {
+      console.error("Evidence verification error:", err);
+      setError(
+        err.message || "Failed to verify evidence integrity."
+      );
+    } finally {
+      setVerifyingId(null);
+    }
+  }
+
+  const verifiedCount = evidence.filter(
+    (item) => verificationResults[item.id]?.verified === true
+  ).length;
+
+  const verificationAttemptCount = evidence.filter(
+    (item) => verificationResults[item.id]
+  ).length;
+
+  let integrityStatus = "PENDING";
+
+  if (evidence.length === 0) {
+    integrityStatus = "NO EVIDENCE";
+  } else if (verifiedCount === evidence.length) {
+    integrityStatus = "VERIFIED";
+  } else if (
+    Object.values(verificationResults).some(
+      (result) =>
+        result.status === "MISMATCH" ||
+        result.status === "MISSING"
+    )
+  ) {
+    integrityStatus = "ATTENTION";
+  } else if (verificationAttemptCount > 0) {
+    integrityStatus = "PARTIAL";
   }
 
   if (loading) {
@@ -201,7 +251,6 @@ function Evidence() {
 
   return (
     <div className="dashboard">
-      {/* HEADER */}
       <div className="dashboard-header">
         <div>
           <h1>Evidence</h1>
@@ -216,7 +265,6 @@ function Evidence() {
         </div>
       </div>
 
-      {/* TOP SUMMARY */}
       <div className="stats-grid">
         <div className="stat-card">
           <h3>Total Evidence</h3>
@@ -226,24 +274,27 @@ function Evidence() {
 
         <div className="stat-card">
           <h3>Verified</h3>
-          <div className="stat-value">--</div>
-          <small>Verification API pending</small>
+          <div className="stat-value">{verifiedCount}</div>
+          <small>
+            {evidence.length === 0
+              ? "No evidence"
+              : `${verifiedCount} of ${evidence.length} verified`}
+          </small>
         </div>
 
         <div className="stat-card">
           <h3>Artifacts</h3>
-          <div className="stat-value">--</div>
-          <small>Artifact count API pending</small>
+          <div className="stat-value">{evidence.length}</div>
+          <small>Available evidence records</small>
         </div>
 
         <div className="stat-card">
           <h3>Integrity</h3>
-          <div className="stat-value">--</div>
-          <small>Verification API pending</small>
+          <div className="stat-value">{integrityStatus}</div>
+          <small>SHA-256 verification</small>
         </div>
       </div>
 
-      {/* EVIDENCE SECTION */}
       <div className="section-card">
         <div className="section-header">
           <h2>Collected Evidence</h2>
@@ -251,7 +302,7 @@ function Evidence() {
           <button
             className="upload-button"
             onClick={handleUploadButtonClick}
-            disabled={uploading}
+            disabled={uploading || verifyingId !== null}
           >
             {uploading
               ? "Uploading..."
@@ -275,12 +326,11 @@ function Evidence() {
 
         {error && (
           <div className="investigation-note">
-            <strong>Upload error:</strong>{" "}
+            <strong>Verification error:</strong>{" "}
             {error}
           </div>
         )}
 
-        {/* TABLE */}
         <div className="evidence-table">
           <div className="evidence-row evidence-header">
             <span>Evidence</span>
@@ -298,56 +348,106 @@ function Evidence() {
               </span>
             </div>
           ) : (
-            evidence.map((item, index) => (
-              <div
-                className="evidence-row"
-                key={`${item.filename}-${index}`}
-              >
-                <div className="evidence-name">
-                  <div className="file-icon">
-                    FILE
+            evidence.map((item, index) => {
+              const verification =
+                verificationResults[item.id];
+
+              const isVerifying = verifyingId === item.id;
+
+              return (
+                <div
+                  className="evidence-item-container"
+                  key={`${item.filename}-${index}`}
+                >
+                  <div className="evidence-row">
+                    <div className="evidence-name">
+                      <div className="file-icon">
+                        FILE
+                      </div>
+
+                      <div>
+                        <strong>{item.filename}</strong>
+                        <small>
+                          {item.case_id || caseData.case_id}
+                        </small>
+                      </div>
+                    </div>
+
+                    <span className="muted">
+                      {item.artifact_type || "--"}
+                    </span>
+
+                    <span className="muted">
+                      {formatSize(item.size_bytes)}
+                    </span>
+
+                    <span className="hash">
+                      {shortenHash(item.sha256)}
+                    </span>
+
+                    <span className="artifact-count">
+                      --
+                    </span>
+
+                    <div className="integrity-action">
+                      <button
+                        className="upload-button"
+                        onClick={() =>
+                          handleVerifyEvidence(item.id)
+                        }
+                        disabled={isVerifying}
+                      >
+                        {isVerifying
+                          ? "Verifying..."
+                          : verification
+                            ? "Verify Again"
+                            : "Verify"}
+                      </button>
+                    </div>
                   </div>
 
-                  <div>
-                    <strong>{item.filename}</strong>
-                    <small>
-                      {item.case_id || caseData.case_id}
-                    </small>
-                  </div>
+                  {verification && (
+                    <div className="verification-result-box">
+                      <div className="verification-result-header">
+                        <strong>
+                          {verification.status}
+                        </strong>
+                      </div>
+
+                      <p className="verification-message">
+                        {verification.message}
+                      </p>
+
+                      <div className="verification-details">
+                        <div>
+                          <span>Recorded SHA-256</span>
+                          <strong>
+                            {verification.recorded_sha256}
+                          </strong>
+                        </div>
+
+                        <div>
+                          <span>Calculated SHA-256</span>
+                          <strong>
+                            {verification.calculated_sha256 ||
+                              "Not available"}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                <span className="muted">
-                  {item.artifact_type || "--"}
-                </span>
-
-                <span className="muted">
-                  {formatSize(item.size_bytes)}
-                </span>
-
-                <span className="hash">
-                  {shortenHash(item.sha256)}
-                </span>
-
-                <span className="artifact-count">
-                  --
-                </span>
-
-                <span className="muted">
-                  NOT AVAILABLE
-                </span>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* INTEGRITY INFORMATION */}
       <div className="investigation-note">
         <strong>Evidence Integrity:</strong>{" "}
-        SHA-256 hashes are calculated from uploaded evidence files
-        and recorded by the backend. Integrity verification status
-        will be connected when the verification data source is
-        available.
+        Click Verify to re-calculate the SHA-256 hash of the
+        stored evidence file and compare it with the recorded
+        forensic hash. A matching hash is reported as VERIFIED.
       </div>
     </div>
   );
