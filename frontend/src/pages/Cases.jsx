@@ -52,6 +52,8 @@ function Cases() {
     setSelectedCaseId(caseId);
     setMessage(`Selected ${caseId} for investigation.`);
     setError("");
+
+    window.location.reload();
   }
 
   async function handleCreate(event) {
@@ -218,7 +220,12 @@ function Cases() {
               const isSelected = selectedCaseId === item.case_id;
 
               return (
-                <div className="finding-card" key={item.case_id}>
+                <div
+                  className="finding-card"
+                  key={item.case_id}
+                  onClick={() => handleSelectCase(item.case_id)}
+                  style={{ cursor: "pointer" }}
+                >
                   <span className="severity medium">{item.status || "OPEN"}</span>
 
                   <div className="finding-content">
@@ -230,7 +237,10 @@ function Cases() {
                     type="button"
                     className={`nav-item ${isSelected ? "active" : ""}`}
                     style={{ width: "auto", margin: 0, padding: "8px 12px" }}
-                    onClick={() => handleSelectCase(item.case_id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleSelectCase(item.case_id);
+                    }}
                   >
                     {isSelected ? "Selected" : "Select"}
                   </button>
