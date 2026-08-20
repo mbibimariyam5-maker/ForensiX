@@ -375,3 +375,19 @@ def get_case_timeline(case_id: str):
     connection.close()
 
     return [dict(event) for event in events]
+
+def delete_evidence(evidence_id: int):
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        DELETE FROM evidence
+        WHERE id = ?
+    """, (evidence_id,))
+
+    deleted = cursor.rowcount
+
+    connection.commit()
+    connection.close()
+
+    return deleted

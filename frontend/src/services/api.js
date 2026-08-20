@@ -11,7 +11,6 @@ export async function getCases() {
   return response.json();
 }
 
-
 // Get evidence for a specific case
 export async function getCaseEvidence(caseId) {
   const response = await fetch(
@@ -25,6 +24,39 @@ export async function getCaseEvidence(caseId) {
   return response.json();
 }
 
+// Upload actual evidence file
+export async function uploadEvidence(caseId, file) {
+  const formData = new FormData();
+
+  formData.append('case_id', caseId);
+  formData.append('file', file);
+
+  const response = await fetch(
+    `${API_BASE_URL}/evidence/upload`,
+    {
+      method: 'POST',
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    let message = `Failed to upload evidence: ${response.status}`;
+
+    try {
+      const errorData = await response.json();
+
+      if (errorData.detail) {
+        message = errorData.detail;
+      }
+    } catch {
+      // Keep the default error message.
+    }
+
+    throw new Error(message);
+  }
+
+  return response.json();
+}
 
 // Get findings for a specific case
 export async function getCaseFindings(caseId) {
@@ -39,7 +71,6 @@ export async function getCaseFindings(caseId) {
   return response.json();
 }
 
-
 // Get timeline events for a specific case
 export async function getCaseTimeline(caseId) {
   const response = await fetch(
@@ -52,7 +83,6 @@ export async function getCaseTimeline(caseId) {
 
   return response.json();
 }
-
 
 // Get AI explanation for a complete finding
 export async function getAIExplanation(finding) {
