@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { createCase, getCases } from "../services/api";
+import { createCase, getCases, getSelectedCaseId, setSelectedCase } from "../services/api";
 
 function Cases() {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [selectedCaseId, setSelectedCaseId] = useState(getSelectedCaseId());
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -19,7 +20,7 @@ function Cases() {
       setLoading(true);
       setError("");
 
-      const response = await getCases();
+      const response = await getCases(true);
       setCases(response.cases || []);
     } catch (err) {
       console.error("Cases API error:", err);
@@ -46,6 +47,13 @@ function Cases() {
     });
   }
 
+  function handleSelectCase(caseId) {
+    setSelectedCase(caseId);
+    setSelectedCaseId(caseId);
+    setMessage(`Selected ${caseId} for investigation.`);
+    setError("");
+  }
+
   async function handleCreate(event) {
     event.preventDefault();
 
@@ -63,7 +71,9 @@ function Cases() {
       const newCase = response.case;
 
       setCases((current) => [newCase, ...current]);
-      setMessage("Case created successfully.");
+      setSelectedCase(newCase.case_id);
+      setSelectedCaseId(newCase.case_id);
+      setMessage("Case created and selected for investigation.");
       setShowForm(false);
       resetForm();
     } catch (err) {
@@ -204,18 +214,29 @@ function Cases() {
           </div>
         ) : (
           <div className="findings-list">
-            {cases.map((item) => (
-              <div className="finding-card" key={item.case_id}>
-                <span className="severity medium">{item.status || "OPEN"}</span>
+            {cases.map((item) => {
+              const isSelected = selectedCaseId === item.case_id;
 
-                <div className="finding-content">
-                  <h3>{item.case_name}</h3>
-                  <p>{item.case_id} • Created {item.created_at ? new Date(item.created_at).toLocaleString() : "--"}</p>
+              return (
+                <div className="finding-card" key={item.case_id}>
+                  <span className="severity medium">{item.status || "OPEN"}</span>
+
+                  <div className="finding-content">
+                    <h3>{item.case_name}</h3>
+                    <p>{item.case_id} • Created {item.created_at ? new Date(item.created_at).toLocaleString() : "--"}</p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className={`nav-item ${isSelected ? "active" : ""}`}
+                    style={{ width: "auto", margin: 0, padding: "8px 12px" }}
+                    onClick={() => handleSelectCase(item.case_id)}
+                  >
+                    {isSelected ? "Selected" : "Select"}
+                  </button>
                 </div>
-
-                <span className="finding-score">CASE</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
