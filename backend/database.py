@@ -406,7 +406,7 @@ def get_case_timeline(case_id: str):
         FROM timeline_events
         WHERE case_id = ?
         ORDER BY timestamp ASC, id ASC
-    """)
+    """, (case_id,))
 
     events = cursor.fetchall()
     connection.close()
