@@ -15,11 +15,6 @@ _OriginalCanvas = _canvas.Canvas
 class ProfessionalCanvas(_OriginalCanvas):
     """Keep the existing PDF endpoint compatible while improving its layout."""
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._forensix_header = True
-        self._last_y = None
-
     def _draw_header_footer(self):
         width, height = self._pagesize
         self.saveState()
@@ -27,14 +22,14 @@ class ProfessionalCanvas(_OriginalCanvas):
         self.rect(0, height - 34, width, 34, stroke=0, fill=1)
         self.setFillColor(colors.white)
         self.setFont("Helvetica-Bold", 9)
-        self.drawString(36, height - 22, "FORENSIX")
+        super().drawString(36, height - 22, "FORENSIX")
         self.setFont("Helvetica", 7)
         self.drawRightString(width - 36, height - 22, "DIGITAL FORENSICS INVESTIGATION REPORT")
         self.setStrokeColor(colors.HexColor("#CBD5E1"))
         self.line(36, 34, width - 36, 34)
         self.setFillColor(colors.HexColor("#64748B"))
         self.setFont("Helvetica", 7)
-        self.drawString(36, 21, "Confidential • AI-Assisted Cyber Forensic Triage Platform")
+        super().drawString(36, 21, "Confidential • AI-Assisted Cyber Forensic Triage Platform")
         self.drawRightString(width - 36, 21, f"Page {self.getPageNumber()}")
         self.restoreState()
 
@@ -42,7 +37,6 @@ class ProfessionalCanvas(_OriginalCanvas):
         text = str(text)
         width, height = self._pagesize
 
-        # Main report title.
         if "FORENSIX - DIGITAL FORENSICS INVESTIGATION REPORT" in text:
             self.saveState()
             self.setFillColor(colors.HexColor("#0B1220"))
@@ -53,7 +47,6 @@ class ProfessionalCanvas(_OriginalCanvas):
             self.setFont("Helvetica", 8)
             self.drawCentredString(width / 2, height - 88, "DIGITAL FORENSICS INVESTIGATION REPORT")
             self.restoreState()
-            self._last_y = y
             return
 
         upper = text.strip().upper()
@@ -62,7 +55,6 @@ class ProfessionalCanvas(_OriginalCanvas):
             "VERIFICATION", "INTEGRITY", "REPORT", "SUMMARY"
         )
 
-        # Section labels get a clean report-style band.
         if len(text) <= 55 and any(word in upper for word in section_words):
             self.saveState()
             band_y = max(42, y - 5)
@@ -70,24 +62,20 @@ class ProfessionalCanvas(_OriginalCanvas):
             self.roundRect(42, band_y, width - 84, 19, 4, stroke=0, fill=1)
             self.setFillColor(colors.HexColor("#0F172A"))
             self.setFont("Helvetica-Bold", 9)
-            self.drawString(50, band_y + 6, text[:90])
+            super().drawString(50, band_y + 6, text[:90])
             self.restoreState()
-            self._last_y = y
             return
 
-        # Case metadata is emphasized.
         if upper.startswith(("CASE ID:", "CASE NAME:", "STATUS:", "GENERATED:")):
             self.saveState()
             self.setFillColor(colors.HexColor("#F8FAFC"))
             self.roundRect(42, y - 5, width - 84, 18, 3, stroke=0, fill=1)
             self.setFillColor(colors.HexColor("#334155"))
             self.setFont("Helvetica-Bold", 9)
-            self.drawString(50, y + 2, text[:110])
+            super().drawString(50, y + 2, text[:110])
             self.restoreState()
-            self._last_y = y
             return
 
-        # Keep normal report content readable and prevent visual overflow.
         self.saveState()
         font_name = self._fontname if hasattr(self, "_fontname") else "Helvetica"
         font_size = self._fontsize if hasattr(self, "_fontsize") else 10
@@ -99,7 +87,6 @@ class ProfessionalCanvas(_OriginalCanvas):
         self.setFillColor(colors.HexColor("#1E293B"))
         super().drawString(50, y, text, *args, **kwargs)
         self.restoreState()
-        self._last_y = y
 
     def showPage(self):
         self._draw_header_footer()
