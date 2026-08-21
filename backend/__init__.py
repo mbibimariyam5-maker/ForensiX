@@ -35,8 +35,6 @@ class ProfessionalCanvas(_OriginalCanvas):
         page = self.getPageNumber()
 
         self.saveState()
-
-        # Header on continuation pages only. The first page has the report title.
         if page > 1:
             self.setFillColor(self.DARK)
             self.rect(0, height - 32, width, 32, stroke=0, fill=1)
@@ -59,7 +57,6 @@ class ProfessionalCanvas(_OriginalCanvas):
             "CONFIDENTIAL  •  AI-ASSISTED CYBER FORENSIC TRIAGE PLATFORM",
         )
         self.drawRightString(width - 36, 21, f"PAGE {page}")
-
         self.restoreState()
 
     def _section_band(self, x, y, width, text):
@@ -83,43 +80,33 @@ class ProfessionalCanvas(_OriginalCanvas):
     def drawString(self, x, y, text, *args, **kwargs):
         text = str(text)
         upper = text.strip().upper()
-        width, height = self._pagesize
+        width, _ = self._pagesize
 
-        # Main report title.
         if upper.startswith("FORENSIX - DIGITAL FORENSICS INVESTIGATION REPORT"):
             self.saveState()
             self.setFillColor(self.DARK)
-            self.roundRect(42, y - 8, width - 84, 34, 6, stroke=0, fill=1)
+            self.roundRect(42, y - 4, width - 84, 30, 6, stroke=0, fill=1)
             self.setFillColor(colors.white)
             self.setFont("Helvetica-Bold", 14)
-            self.drawCentredString(width / 2, y + 7, "FORENSIX")
+            self.drawCentredString(width / 2, y + 8, "FORENSIX")
             self.setFont("Helvetica", 7.5)
             self.drawCentredString(
-                width / 2, y - 3, "DIGITAL FORENSICS INVESTIGATION REPORT"
+                width / 2, y - 1, "DIGITAL FORENSICS INVESTIGATION REPORT"
             )
             self.restoreState()
             return
 
         section_words = (
-            "CASE DESCRIPTION",
-            "EVIDENCE",
-            "FINDINGS",
-            "INVESTIGATION TIMELINE",
-            "VERIFICATION",
-            "INTEGRITY",
-            "REPORT",
-            "SUMMARY",
-            "CHAIN OF CUSTODY",
-            "AI ANALYSIS",
+            "CASE DESCRIPTION", "EVIDENCE", "FINDINGS", "INVESTIGATION TIMELINE",
+            "VERIFICATION", "INTEGRITY", "REPORT", "SUMMARY",
+            "CHAIN OF CUSTODY", "AI ANALYSIS",
         )
         if len(text) <= 60 and any(
-            upper == word or upper.startswith(word + " ")
-            for word in section_words
+            upper == word or upper.startswith(word + " ") for word in section_words
         ):
             self._section_band(42, y, width - 84, text)
             return
 
-        # Case metadata is presented as a clean information block.
         if upper.startswith(("CASE ID:", "CASE NAME:", "STATUS:", "GENERATED:")):
             self.saveState()
             self.setFillColor(self.PANEL)
@@ -128,7 +115,7 @@ class ProfessionalCanvas(_OriginalCanvas):
             self.roundRect(42, y - 5, width - 84, 18, 3, stroke=1, fill=1)
             self.setFillColor(self.MUTED)
             self.setFont("Helvetica-Bold", 8)
-            label, sep, value = text.partition(":")
+            label, _, value = text.partition(":")
             super().drawString(50, y + 1, label.upper() + ":")
             self.setFillColor(self.TEXT)
             self.setFont("Helvetica", 8.5)
@@ -136,7 +123,6 @@ class ProfessionalCanvas(_OriginalCanvas):
             self.restoreState()
             return
 
-        # Evidence cards.
         if upper.startswith("EVIDENCE #"):
             self._panel(42, y - 7, width - 84, 20, self.PANEL_BLUE)
             self.setFillColor(self.ACCENT)
@@ -153,7 +139,6 @@ class ProfessionalCanvas(_OriginalCanvas):
             self.restoreState()
             return
 
-        # Findings cards.
         if upper and " - " in text and (
             upper.startswith("FIND") or upper.startswith("F-") or "FINDING" in upper
         ):
@@ -172,7 +157,17 @@ class ProfessionalCanvas(_OriginalCanvas):
             self.restoreState()
             return
 
-        # Timeline entries get a visual time marker.
+        if upper.startswith(("TOTAL EVIDENCE:", "TOTAL FINDINGS:", "TOTAL TIMELINE EVENTS:")):
+            self.saveState()
+            self.setFillColor(self.PANEL)
+            self.setStrokeColor(self.BORDER)
+            self.roundRect(42, y - 5, width - 84, 18, 3, stroke=1, fill=1)
+            self.setFillColor(self.MUTED)
+            self.setFont("Helvetica-Bold", 8.5)
+            super().drawString(50, y + 1, text)
+            self.restoreState()
+            return
+
         if " - " in text and len(text) > 15:
             self.saveState()
             self.setFillColor(self.ACCENT)
@@ -183,18 +178,6 @@ class ProfessionalCanvas(_OriginalCanvas):
             self.restoreState()
             return
 
-        # Totals / ordinary lines.
-        if upper.startswith(("TOTAL EVIDENCE:", "TOTAL FINDINGS:", "TOTAL TIMELINE EVENTS:")):
-            self.saveState()
-            self.setFillColor(self.PANEL)
-            self.roundRect(42, y - 5, width - 84, 18, 3, stroke=0, fill=1)
-            self.setFillColor(self.MUTED)
-            self.setFont("Helvetica-Bold", 8.5)
-            super().drawString(50, y + 1, text)
-            self.restoreState()
-            return
-
-        # Normal body text, with readable wrapping/truncation within the report width.
         self.saveState()
         font_name = getattr(self, "_fontname", "Helvetica")
         font_size = getattr(self, "_fontsize", 10)
