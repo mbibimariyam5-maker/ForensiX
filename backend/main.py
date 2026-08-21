@@ -399,7 +399,7 @@ def add_finding(finding: FindingCreate):
         finding_id=finding.finding_id,
         case_id=finding.case_id,
         artifact=finding.artifact,
-        type=finding.type,
+        finding_type=finding.type,
         severity=finding.severity,
         score=finding.score,
         timestamp=finding.timestamp,
