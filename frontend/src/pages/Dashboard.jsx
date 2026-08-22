@@ -86,6 +86,57 @@ function Dashboard() {
       String(finding.severity).toUpperCase() === "CRITICAL"
   ).length;
 
+  const riskSeverityRank = {
+    CRITICAL: 4,
+    HIGH: 3,
+    MEDIUM: 2,
+    LOW: 1,
+  };
+
+  const riskSeverityFloor = {
+    CRITICAL: 90,
+    HIGH: 70,
+    MEDIUM: 40,
+    LOW: 10,
+  };
+
+  const riskAssessment = findings.reduce(
+    (highest, finding) => {
+      const severity = String(finding.severity || "LOW").toUpperCase();
+      const rawScore = Number(finding.score);
+      const score = Number.isFinite(rawScore)
+        ? Math.max(0, Math.min(100, rawScore))
+        : 0;
+      const weightedScore = Math.max(score, riskSeverityFloor[severity] || 0);
+
+      if (
+        weightedScore > highest.score ||
+        (weightedScore === highest.score &&
+          (riskSeverityRank[severity] || 0) >
+            (riskSeverityRank[highest.level] || 0))
+      ) {
+        return {
+          score: weightedScore,
+          level: severity in riskSeverityRank ? severity : "LOW",
+        };
+      }
+
+      return highest;
+    },
+    { score: 0, level: "LOW" }
+  );
+
+  const riskLevel =
+    riskAssessment.level === "CRITICAL" || riskAssessment.score >= 90
+      ? "CRITICAL"
+      : riskAssessment.level === "HIGH" || riskAssessment.score >= 70
+        ? "HIGH"
+        : riskAssessment.level === "MEDIUM" || riskAssessment.score >= 40
+          ? "MEDIUM"
+          : "LOW";
+
+  const riskScore = Math.round(riskAssessment.score);
+
   const recentFindings = [...findings]
     .sort(
       (a, b) =>
@@ -238,14 +289,14 @@ function Dashboard() {
 
             <div className="risk-card">
               <div className="risk-circle">
-                <strong>--</strong>
+                <strong>{riskScore}</strong>
                 <span>PRIORITY</span>
               </div>
               <div className="risk-info">
-                <h3>AWAITING RISK DATA</h3>
+                <h3>{riskLevel}</h3>
                 <p>
-                  Case-level priority will be connected when the backend
-                  provides the risk or priority result.
+                  Case priority is derived from the highest severity and score
+                  returned by the investigation findings.
                 </p>
               </div>
             </div>
@@ -337,8 +388,8 @@ function Dashboard() {
           </div>
 
           <div className="investigation-note">
-            Priority score will be connected when a backend risk or priority
-            result is available.
+            Risk score is derived from the current case findings and their
+            severity.
           </div>
         </div>
       </div>
